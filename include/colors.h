@@ -10,6 +10,8 @@
 #define CYAN "\x1b[36m"
 #define PURPLE "\x1b[35m"
 
+#define HIGHLIGHT "\x1b[100m"
+
 #define CLEAR_SCREEN "\x1b[2J"
 #define RESET_CURSOR "\x1b[H"
 

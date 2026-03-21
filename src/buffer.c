@@ -2,7 +2,6 @@
 #include "direction.h"
 #include "reporter.h"
 #include "string_builder.h"
-#include "terminal.h"
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -21,49 +20,84 @@ struct Buffer {
     uint16_t top_offset;
     /* # of rows on the left of the screen hidden */
     uint16_t left_offset;
+    bool is_modified;
 };
 
-void buffer_normal_cmd(Buffer *self, char cmd) {
+static void follow_momentum(Buffer *self) {
+    switch (self->momentum) {
+    case LEFT:
+        if (self->cursor_col > 0) {
+            self->cursor_col--;
+        }
+        break;
+    case DOWN: self->cursor_row++; break;
+    case UP:
+        if (self->cursor_row > 0) {
+            self->cursor_row--;
+        }
+        break;
+    case RIGHT: self->cursor_col++; break;
+    }
+}
+
+void buffer_insert_cmd(Buffer *self, key_t cmd) {
+    uint16_t row = 0, col = 0;
+    size_t contents_idx = 0;
+    size_t contents_len = string_builder_len(self->contents);
+    self->is_modified = true;
+    while (row < self->cursor_row) {
+        if (contents_idx == contents_len) {
+            string_builder_append_char(self->contents, '\n');
+            contents_len++;
+            row++;
+        } else if (string_builder_get_char(self->contents, contents_idx)
+                   == '\n') {
+            row++;
+        }
+        contents_idx++;
+    }
+    while (col < self->cursor_col) {
+        if (contents_idx == contents_len) {
+            string_builder_append_char(self->contents, ' ');
+            contents_len++;
+        } else if (string_builder_get_char(self->contents, contents_idx)
+                   == '\n') {
+            string_builder_insert(self->contents, contents_idx, " ");
+            contents_len++;
+        }
+        col++;
+        contents_idx++;
+    }
+
+    if (contents_idx == contents_len
+        || string_builder_get_char(self->contents, contents_idx) == '\n') {
+        string_builder_insert(self->contents, contents_idx, " ");
+        contents_len++;
+    }
+    string_builder_set_char(self->contents, contents_idx, cmd);
+
+    follow_momentum(self);
+}
+
+void buffer_normal_cmd(Buffer *self, key_t cmd) {
     bool direction_cmd = true;
     direction_t direction;
     switch (cmd) {
-        case 'h':
-            direction = LEFT;
-            break;
-        case 'j':
-            direction = DOWN;
-            break;
-        case 'k':
-            direction = UP;
-            break;
-        case 'l':
-            direction = RIGHT;
-            break;
-        default:
-            direction_cmd = false;
+    case 'h':
+    case ARROW_LEFT: direction = LEFT; break;
+    case 'j':
+    case ARROW_DOWN: direction = DOWN; break;
+    case 'k':
+    case ARROW_UP: direction = UP; break;
+    case 'l':
+    case ARROW_RIGHT: direction = RIGHT; break;
+    default: direction_cmd = false;
     }
     if (direction_cmd) {
         if (direction != self->momentum) {
             self->momentum = direction;
         } else {
-            switch (direction) {
-                case LEFT:
-                    if (self->cursor_col > 0) {
-                        self->cursor_col--;
-                    }
-                    break;
-                case DOWN:
-                    self->cursor_row++;
-                    break;
-                case UP:
-                    if (self->cursor_row > 0) {
-                        self->cursor_row--;
-                    }
-                    break;
-                case RIGHT:
-                    self->cursor_col++;
-                    break;
-            }
+            follow_momentum(self);
         }
     }
 }
@@ -74,14 +108,12 @@ void buffer_display(Buffer *self, uint16_t top_offset, uint16_t left_offset,
     size_t contents_idx = 0;
     const size_t contents_len = string_builder_len(self->contents);
     StringBuilder *display = string_builder_create();
-    char contents_char[2];
-    contents_char[1] = '\0';
+    char contents_char;
 
     move_cursor(display, top_offset + 1, left_offset + 1);
     while (row < row_ct && contents_idx < contents_len) {
-        *contents_char
-            = string_builder_get_char(self->contents, contents_idx++);
-        if (*contents_char == '\n') {
+        contents_char = string_builder_get_char(self->contents, contents_idx++);
+        if (contents_char == '\n') {
             row++;
             col = 0;
             move_cursor(display, row + top_offset + 1, col + left_offset + 1);
@@ -89,13 +121,32 @@ void buffer_display(Buffer *self, uint16_t top_offset, uint16_t left_offset,
         }
         col++;
         if (col >= col_ct) continue;
-        string_builder_append(display, contents_char);
+        if (contents_char == '\t') {
+            /* TODO - how should tabs be displayed? is this best way? */
+            contents_char = ' ';
+        }
+        string_builder_append_char(display, contents_char);
     }
     move_cursor(display, top_offset + 1 + self->cursor_row - self->top_offset,
                 left_offset + 1 + self->cursor_col - self->left_offset);
     write(STDOUT_FILENO, string_builder_to_string(display),
           string_builder_len(display));
     string_builder_destroy(display);
+}
+
+void buffer_save(Buffer *self) {
+    FILE *file = fopen(self->filename, "w");
+    if (!file) {
+        report_system_error(FILENAME ": failed to open file");
+        exit(1);
+    }
+    fwrite(string_builder_to_string(self->contents), sizeof(char),
+           string_builder_len(self->contents), file);
+    fclose(file);
+}
+
+bool buffer_is_modified(Buffer *self) {
+    return self->is_modified;
 }
 
 #define CHUNK_SIZE 128
@@ -141,6 +192,7 @@ Buffer *buffer_create(const char *filename) {
     self->top_offset = 0;
     self->left_offset = 0;
     self->momentum = RIGHT;
+    self->is_modified = false;
 
     return self;
 buffer_create_fail:

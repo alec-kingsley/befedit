@@ -1,6 +1,7 @@
 #include "terminal.h"
 #include "colors.h"
 #include "reporter.h"
+#include <errno.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -17,13 +18,9 @@ struct {
     struct termios orig_termios;
 } g_term;
 
-uint16_t get_row_ct(void) {
-    return g_term.row_ct;
-}
+uint16_t get_row_ct(void) { return g_term.row_ct; }
 
-uint16_t get_col_ct(void) {
-    return g_term.col_ct;
-}
+uint16_t get_col_ct(void) { return g_term.col_ct; }
 
 void update_window_size(void) {
     struct winsize ws;
@@ -35,6 +32,63 @@ void update_window_size(void) {
 
     g_term.col_ct = ws.ws_col;
     g_term.row_ct = ws.ws_row;
+}
+
+bool key_is_printable(key_t key) {
+    return key < 0x80 && key != 27 && key > 0x1f;
+}
+
+static key_t get_key_seq(void) {
+    char seq[3];
+    if (read(STDIN_FILENO, &seq[0], 1) != 1) return '\x1b';
+    if (read(STDIN_FILENO, &seq[1], 1) != 1) return '\x1b';
+    if (seq[0] == '[') {
+        if (seq[1] >= '0' && seq[1] <= '9') {
+            if (read(STDIN_FILENO, &seq[2], 1) != 1) return '\x1b';
+            if (seq[2] == '~') {
+                switch (seq[1]) {
+                case '1': return HOME_KEY;
+                case '3': return DEL_KEY;
+                case '4': return END_KEY;
+                case '5': return PAGE_UP;
+                case '6': return PAGE_DOWN;
+                case '7': return HOME_KEY;
+                case '8': return END_KEY;
+                }
+            }
+        } else {
+            switch (seq[1]) {
+            case 'A': return ARROW_UP;
+            case 'B': return ARROW_DOWN;
+            case 'C': return ARROW_RIGHT;
+            case 'D': return ARROW_LEFT;
+            case 'H': return HOME_KEY;
+            case 'F': return END_KEY;
+            }
+        }
+    } else if (seq[0] == 'O') {
+        switch (seq[1]) {
+        case 'H': return HOME_KEY;
+        case 'F': return END_KEY;
+        }
+    }
+    return '\x1b';
+}
+
+key_t get_key(void) {
+    int nread;
+    char c;
+    while ((nread = read(STDIN_FILENO, &c, 1)) != 1) {
+        if (nread == -1 && errno != EAGAIN) {
+            report_system_error(FILENAME ": failed to get user input");
+            exit(1);
+        }
+    }
+    if (c == '\x1b') {
+        return get_key_seq();
+    } else {
+        return c;
+    }
 }
 
 void move_cursor(StringBuilder *display, uint16_t row, uint16_t col) {

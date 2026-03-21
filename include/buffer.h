@@ -2,14 +2,20 @@
 #ifndef BUFFER_H
 #define BUFFER_H
 
+#include "terminal.h"
 #include <stdint.h>
 
 typedef struct Buffer Buffer;
 
 /**
+ * Send insert mode command to buffer.
+ */
+void buffer_insert_cmd(Buffer *self, key_t cmd);
+
+/**
  * Send normal mode command to buffer.
  */
-void buffer_normal_cmd(Buffer *self, char cmd);
+void buffer_normal_cmd(Buffer *self, key_t cmd);
 
 /**
  * Display buffer in a region on the screen.
@@ -19,6 +25,16 @@ void buffer_normal_cmd(Buffer *self, char cmd);
  */
 void buffer_display(Buffer *self, uint16_t top_offset, uint16_t left_offset,
                     uint16_t row_ct, uint16_t col_ct);
+
+/**
+ * Save buffer to file.
+ */
+void buffer_save(Buffer *self);
+
+/**
+ * Return `true` iff `self` has been modified.
+ */
+bool buffer_is_modified(Buffer *self);
 
 /**
  * Create a new `Buffer` object.

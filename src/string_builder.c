@@ -50,6 +50,11 @@ char string_builder_get_char(StringBuilder *self, int32_t index) {
     return self->val[pos];
 }
 
+void string_builder_set_char(StringBuilder *self, int32_t index, char c) {
+    size_t pos = index < 0 ? self->len + index : (size_t)index;
+    self->val[pos] = c;
+}
+
 bool string_builder_set(StringBuilder *self, const char *new) {
     const size_t new_len = strlen(new);
     while (self->size < new_len) {
@@ -59,6 +64,32 @@ bool string_builder_set(StringBuilder *self, const char *new) {
     }
     memcpy(self->val, new, new_len);
     self->len = new_len;
+    return true;
+}
+
+bool string_builder_insert(StringBuilder *self, size_t index, const char *other) {
+    const size_t other_len = strlen(other);
+    const size_t new_size = (self->len + other_len) * sizeof(char);
+    while (self->size < new_size) {
+        if (!expand(self)) {
+            return false;
+        }
+    }
+    memmove(self->val + index + other_len, self->val + index, self->len - index);
+    memcpy(self->val + index, other, other_len);
+    self->len += other_len;
+    return true;
+}
+
+bool string_builder_append_char(StringBuilder *self, char other) {
+    const size_t new_size = (self->len + 1) * sizeof(char);
+    while (self->size < new_size) {
+        if (!expand(self)) {
+            return false;
+        }
+    }
+    self->val[self->len] = other;
+    self->len++;
     return true;
 }
 

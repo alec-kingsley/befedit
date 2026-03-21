@@ -18,6 +18,12 @@ size_t string_builder_len(StringBuilder *self);
 char *string_builder_to_string(StringBuilder *self);
 
 /**
+ * Set the char at the specified index.
+ * If `index` is negative, it starts from the end, where -1 is the last char.
+ */
+void string_builder_set_char(StringBuilder *self, int32_t index, char c);
+
+/**
  * Get the char at the specified index.
  * If `index` is negative, it starts from the end, where -1 is the last char.
  */
@@ -28,6 +34,18 @@ char string_builder_get_char(StringBuilder *self, int32_t index);
  * Return `true` on success.
  */
 bool string_builder_set(StringBuilder *self, const char *new);
+
+/**
+ * Insert `other` to `string_builder` at index `index`.
+ * Return `true` on success.
+ */
+bool string_builder_insert(StringBuilder *self, size_t index, const char *other);
+
+/**
+ * Append `other` to `string_builder`.
+ * Return `true` on success.
+ */
+bool string_builder_append_char(StringBuilder *self, char other);
 
 /**
  * Append `other` to `string_builder`.
