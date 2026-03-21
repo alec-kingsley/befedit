@@ -2,6 +2,7 @@
 #include "direction.h"
 #include "reporter.h"
 #include "string_builder.h"
+#include "terminal.h"
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -44,6 +45,10 @@ void buffer_insert_cmd(Buffer *self, key_t cmd) {
     uint16_t row = 0, col = 0;
     size_t contents_idx = 0;
     size_t contents_len = string_builder_len(self->contents);
+    if (!key_is_printable(cmd)) {
+        /* TODO - allow arrow keys to work */
+        return;
+    }
     self->is_modified = true;
     while (row < self->cursor_row) {
         if (contents_idx == contents_len) {
@@ -143,6 +148,7 @@ void buffer_save(Buffer *self) {
     fwrite(string_builder_to_string(self->contents), sizeof(char),
            string_builder_len(self->contents), file);
     fclose(file);
+    self->is_modified = false;
 }
 
 bool buffer_is_modified(Buffer *self) {
