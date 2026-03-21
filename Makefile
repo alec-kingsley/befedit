@@ -4,7 +4,7 @@ BIN_DIR := bin
 INCLUDE_DIR := include
 
 SRCS := $(wildcard $(SRC_DIR)/*.c)
-SRC_MAIN := $(SRC_DIR)/main.c
+SRC_MAIN := $(SRC_DIR)/befedit.c
 SRC_SRCS := $(filter-out $(SRC_MAIN), $(SRCS))
 
 OBJS := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SRC_SRCS))
@@ -16,11 +16,11 @@ TARGET := $(BIN_DIR)/befedit
 all: $(TARGET)
 
 # build target
-$(TARGET): $(OBJS) $(BUILD_DIR)/main.o | $(BIN_DIR)
+$(TARGET): $(OBJS) $(BUILD_DIR)/befedit.o | $(BIN_DIR)
 	gcc $^ -o $@ -lm
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(BUILD_DIR)
 	gcc $(CFLAGS) -c $< -o $@
-$(BUILD_DIR)/main.o: $(SRC_MAIN) | $(BUILD_DIR)
+$(BUILD_DIR)/befedit.o: $(SRC_MAIN) | $(BUILD_DIR)
 	gcc $(CFLAGS) -c $< -o $@
 
 # create directories if missing
