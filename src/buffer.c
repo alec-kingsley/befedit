@@ -41,11 +41,30 @@ static void follow_momentum(Buffer *self) {
     }
 }
 
+static void follow_reverse_momentum(Buffer *self) {
+    switch (self->momentum) {
+    case RIGHT:
+        if (self->cursor_col > 0) {
+            self->cursor_col--;
+        }
+        break;
+    case UP: self->cursor_row++; break;
+    case DOWN:
+        if (self->cursor_row > 0) {
+            self->cursor_row--;
+        }
+        break;
+    case LEFT: self->cursor_col++; break;
+    }
+}
+
 void buffer_insert_cmd(Buffer *self, key_t cmd) {
     uint16_t row = 0, col = 0;
     size_t contents_idx = 0;
     size_t contents_len = string_builder_len(self->contents);
-    if (!key_is_printable(cmd)) {
+    if (cmd == BACKSPACE) {
+        follow_reverse_momentum(self);
+    } else if (!key_is_printable(cmd)) {
         /* TODO - allow arrow keys to work */
         return;
     }
@@ -79,9 +98,12 @@ void buffer_insert_cmd(Buffer *self, key_t cmd) {
         string_builder_insert(self->contents, contents_idx, " ");
         contents_len++;
     }
-    string_builder_set_char(self->contents, contents_idx, cmd);
-
-    follow_momentum(self);
+    if (cmd == BACKSPACE) {
+        string_builder_set_char(self->contents, contents_idx, ' ');
+    } else {
+        string_builder_set_char(self->contents, contents_idx, cmd);
+        follow_momentum(self);
+    }
 }
 
 void buffer_normal_cmd(Buffer *self, key_t cmd) {

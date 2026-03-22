@@ -35,7 +35,7 @@ void update_window_size(void) {
 }
 
 bool key_is_printable(key_t key) {
-    return key < 0x80 && key != 27 && key > 0x1f;
+    return key < 0x80 && key != BACKSPACE && key > 0x1f;
 }
 
 static key_t get_key_seq(void) {

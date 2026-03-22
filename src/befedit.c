@@ -110,6 +110,11 @@ static bool command_mode(Buffer *buffer) {
             keep_running = false;
             break;
         case '\n': keep_running = false; break;
+        case BACKSPACE:
+            if (string_builder_len(cmd) != 0) {
+                string_builder_restrict(cmd, 0, -1);
+            }
+            break;
         default:
             if (key_is_printable(key)) {
                 string_builder_append_char(cmd, key);

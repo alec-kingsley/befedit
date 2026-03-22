@@ -19,6 +19,7 @@ enum special_key {
     PAGE_DOWN
 };
 #define ESC_KEY 27
+#define BACKSPACE 0x7f
 
 typedef uint16_t key_t;
 

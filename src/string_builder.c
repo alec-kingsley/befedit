@@ -106,6 +106,13 @@ bool string_builder_append(StringBuilder *self, const char *other) {
     return true;
 }
 
+void string_builder_restrict(StringBuilder *self, size_t start, int32_t end) {
+    const size_t end_pos = end > 0 ? (size_t)end : self->len + end;
+    const size_t new_len = end_pos - start;
+    memmove(self->val, self->val + start, new_len);
+    self->len = new_len;
+}
+
 StringBuilder *string_builder_create(void) {
     StringBuilder *new = malloc(sizeof(StringBuilder));
     if (!new)

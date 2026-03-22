@@ -54,6 +54,18 @@ bool string_builder_append_char(StringBuilder *self, char other);
 bool string_builder_append(StringBuilder *self, const char *other);
 
 /**
+ * Restrict the range of the `string_builder` to [start, end).
+ * If `end` is less than 1, then it will be places from the end.
+ * For example, `string_builder_restrict(original, 0, 0)` would do
+ * nothing to `original`.
+ *
+ * Prerequisites:
+ * `start` < |string_builder|
+ * `end` <= |string_builder| OR `end` > -|string_builder|
+ */
+void string_builder_restrict(StringBuilder *self, size_t start, int32_t end);
+
+/**
  * Create a new StringBuilder.
  * Return NULL if error occured.
  */
