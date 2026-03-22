@@ -24,7 +24,7 @@ $(BUILD_DIR)/befedit.o: $(SRC_MAIN) | $(BUILD_DIR)
 	gcc $(CFLAGS) -c $< -o $@
 
 # create directories if missing
-$(BIN_DIR) $(BUILD_DIR) $(TEST_BUILD_DIR):
+$(BIN_DIR) $(BUILD_DIR):
 	mkdir -p $@
 
 clean:
