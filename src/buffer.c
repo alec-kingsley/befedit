@@ -107,6 +107,29 @@ void buffer_normal_cmd(Buffer *self, key_t cmd) {
     }
 }
 
+/**
+ * Move frame as necessary to fit cursor.
+ */
+static void fit_frame_to_cursor(Buffer *self, uint16_t row_ct, uint16_t col_ct) {
+    const uint16_t min_row = self->top_offset;
+    const uint16_t max_row = min_row + row_ct - 1;
+    const uint16_t min_col = self->left_offset;
+    const uint16_t max_col = min_col + col_ct - 1;
+
+    if (self->cursor_row < min_row) {
+        self->top_offset = self->cursor_row;
+    } else if (self->cursor_row > max_row) {
+        self->top_offset = self->cursor_row - row_ct + 1;
+    }
+    
+    if (self->cursor_col < min_col) {
+        self->left_offset = self->cursor_col;
+    } else if (self->cursor_col > max_col) {
+        self->left_offset = self->cursor_col - col_ct + 1;
+    }
+    
+}
+
 void buffer_display(Buffer *self, uint16_t top_offset, uint16_t left_offset,
                     uint16_t row_ct, uint16_t col_ct) {
     uint16_t row = 0, col = 0;
@@ -114,23 +137,25 @@ void buffer_display(Buffer *self, uint16_t top_offset, uint16_t left_offset,
     const size_t contents_len = string_builder_len(self->contents);
     StringBuilder *display = string_builder_create();
     char contents_char;
-
+    fit_frame_to_cursor(self, row_ct, col_ct);
     move_cursor(display, top_offset + 1, left_offset + 1);
-    while (row < row_ct && contents_idx < contents_len) {
+    while (row < row_ct + self->top_offset && contents_idx < contents_len) {
         contents_char = string_builder_get_char(self->contents, contents_idx++);
         if (contents_char == '\n') {
             row++;
             col = 0;
-            move_cursor(display, row + top_offset + 1, col + left_offset + 1);
-            continue;
+            move_cursor(display, row + top_offset - self->top_offset + 1, left_offset + 1);
+        } else {
+            if (col >= col_ct + self->left_offset) continue;
+            if (contents_char == '\t') {
+                /* TODO - how should tabs be displayed? is this best way? */
+                contents_char = ' ';
+            }
+            if (col >= self->left_offset && row >= self->top_offset) {
+                string_builder_append_char(display, contents_char);
+            }
+            col++;
         }
-        col++;
-        if (col >= col_ct) continue;
-        if (contents_char == '\t') {
-            /* TODO - how should tabs be displayed? is this best way? */
-            contents_char = ' ';
-        }
-        string_builder_append_char(display, contents_char);
     }
     move_cursor(display, top_offset + 1 + self->cursor_row - self->top_offset,
                 left_offset + 1 + self->cursor_col - self->left_offset);
@@ -163,12 +188,14 @@ bool buffer_is_modified(Buffer *self) {
 static bool init_buffer(Buffer *self) {
     FILE *file = fopen(self->filename, "r");
     char chunk[CHUNK_SIZE + 1];
-    chunk[CHUNK_SIZE] = '\0';
+    size_t n;
 
     if (file) {
-        while (fread(chunk, 1, CHUNK_SIZE, file)) {
+        do {
+            n = fread(chunk, 1, CHUNK_SIZE, file);
+            chunk[n] = '\0';
             string_builder_append(self->contents, chunk);
-        }
+        } while (n == CHUNK_SIZE);
         fclose(file);
     }
     return !!file;

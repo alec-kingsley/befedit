@@ -162,6 +162,6 @@ int main(int argc, char **argv) {
         }
     }
     printf(CLEAR_SCREEN RESET_CURSOR SHOW_CURSOR);
-
+    buffer_destroy(buffer);
     return 0;
 }
