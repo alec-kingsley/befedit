@@ -89,14 +89,22 @@ static void run_command(Editor *self, const char *cmd) {
     Buffer *buffer = self->buffer;
     bool should_delete = false;
     if (strcmp(cmd, "w") == 0) {
-        buffer_save(buffer);
-        string_builder_set(self->status_message, buffer_name(self->buffer));
-        string_builder_append(self->status_message, " written");
+        if (buffer_save(buffer)) {
+            string_builder_set(self->status_message, buffer_name(self->buffer));
+            string_builder_append(self->status_message, " written");
+        } else {
+            self->status_message_is_error = true;
+            string_builder_set(self->status_message, "failed to write to buffer");
+        }
     } else if (strcmp(cmd, "x") == 0 || strcmp(cmd, "wq") == 0) {
-        buffer_save(buffer);
         should_delete = true;
-        string_builder_set(self->status_message, buffer_name(self->buffer));
-        string_builder_append(self->status_message, " written");
+        if (buffer_save(buffer)) {
+            string_builder_set(self->status_message, buffer_name(self->buffer));
+            string_builder_append(self->status_message, " written");
+        } else {
+            self->status_message_is_error = true;
+            string_builder_set(self->status_message, "failed to write to buffer");
+        }
     } else if (strcmp(cmd, "q!") == 0) {
         should_delete = true;
     } else if (strcmp(cmd, "q") == 0) {

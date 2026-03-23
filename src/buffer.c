@@ -319,16 +319,16 @@ char *buffer_name(Buffer *self) {
     return self->filename;
 }
 
-void buffer_save(Buffer *self) {
+bool buffer_save(Buffer *self) {
     FILE *file = fopen(self->filename, "w");
     if (!file) {
-        report_system_error(FILENAME ": failed to open file");
-        exit(1);
+        return false;
     }
     fwrite(string_builder_to_string(self->contents), sizeof(char),
            string_builder_len(self->contents), file);
     fclose(file);
     self->is_modified = false;
+    return true;
 }
 
 bool buffer_is_modified(Buffer *self) {

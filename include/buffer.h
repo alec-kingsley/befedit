@@ -31,8 +31,9 @@ char *buffer_name(Buffer *self);
 
 /**
  * Save buffer to file.
+ * Return `true` on success.
  */
-void buffer_save(Buffer *self);
+bool buffer_save(Buffer *self);
 
 /**
  * Return `true` iff `self` has been modified.
