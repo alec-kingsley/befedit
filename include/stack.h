@@ -32,6 +32,11 @@ bool stack_push(Stack *self, void *val);
 void *stack_peek(Stack *self);
 
 /**
+ * Retrieve an element from position `index` in `self`.
+ */
+void *stack_get(Stack *self, size_t index);
+
+/**
  * Retrieve an element from the top of the `stack` and remove it.
  */
 void *stack_pop(Stack *self);

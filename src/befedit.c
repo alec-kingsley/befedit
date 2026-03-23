@@ -155,7 +155,7 @@ int main(int argc, char **argv) {
             } else if (key == ESC_KEY && mode == INSERT) {
                 mode = NORMAL;
             }
-            buffer_cmd(buffer, key);
+            buffer_cmd(buffer, key, false);
             break;
         }
     }

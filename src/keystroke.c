@@ -32,7 +32,9 @@ static bool expand(Keystroke *self) {
     return true;
 }
 
-size_t keystroke_len(Keystroke *self) { return self->len; }
+size_t keystroke_len(Keystroke *self) {
+    return self->len;
+}
 
 key_t keystroke_get_key(Keystroke *self, int32_t index) {
     size_t pos = index < 0 ? self->len + index : (size_t)index;
@@ -58,7 +60,7 @@ bool keystroke_prepend_key(Keystroke *self, key_t key) {
             return false;
         }
     }
-    memmove(self->val + 1, self->val, self->len);
+    memmove(self->val + 1, self->val, self->len * sizeof(key_t));
     self->val[0] = key;
     self->len++;
     return true;

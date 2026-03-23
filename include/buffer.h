@@ -9,8 +9,11 @@ typedef struct Buffer Buffer;
 
 /**
  * Send command to buffer.
+ *
+ * `is_simulated` is for if the user is not entering the command, for example if
+ * an action is being re-done.
  */
-void buffer_cmd(Buffer *self, key_t cmd);
+void buffer_cmd(Buffer *self, key_t cmd, bool is_simulated);
 
 /**
  * Display buffer in a region on the screen.

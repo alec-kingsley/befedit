@@ -14,3 +14,14 @@ direction_t reverse_direction(direction_t direction) {
     report_logic_error(FILENAME ": unknown direction");
     exit(1);
 }
+
+key_t direction_as_key(direction_t direction) {
+    switch (direction) {
+    case UP: return ARROW_UP;
+    case DOWN: return ARROW_DOWN;
+    case RIGHT: return ARROW_RIGHT;
+    case LEFT: return ARROW_LEFT;
+    }
+    report_logic_error(FILENAME ": unknown direction");
+    exit(1);
+}

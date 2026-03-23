@@ -34,7 +34,9 @@ static bool expand(StringBuilder *self) {
     return true;
 }
 
-size_t string_builder_len(StringBuilder *self) { return self->len; }
+size_t string_builder_len(StringBuilder *self) {
+    return self->len;
+}
 
 char *string_builder_to_string(StringBuilder *self) {
     if (self->len + 1 > self->size) {
@@ -62,7 +64,7 @@ bool string_builder_set(StringBuilder *self, const char *new) {
             return false;
         }
     }
-    memcpy(self->val, new, new_len);
+    memcpy(self->val, new, new_len * sizeof(char));
     self->len = new_len;
     return true;
 }
@@ -77,8 +79,8 @@ bool string_builder_insert(StringBuilder *self, size_t index,
         }
     }
     memmove(self->val + index + other_len, self->val + index,
-            self->len - index);
-    memcpy(self->val + index, other, other_len);
+            (self->len - index) * sizeof(char));
+    memcpy(self->val + index, other, other_len * sizeof(char));
     self->len += other_len;
     return true;
 }
@@ -103,7 +105,7 @@ bool string_builder_append(StringBuilder *self, const char *other) {
             return false;
         }
     }
-    memcpy(self->val + self->len, other, other_len);
+    memcpy(self->val + self->len, other, other_len * sizeof(char));
     self->len += other_len;
     return true;
 }
@@ -111,7 +113,7 @@ bool string_builder_append(StringBuilder *self, const char *other) {
 void string_builder_restrict(StringBuilder *self, size_t start, int32_t end) {
     const size_t end_pos = end > 0 ? (size_t)end : self->len + end;
     const size_t new_len = end_pos - start;
-    memmove(self->val, self->val + start, new_len);
+    memmove(self->val, self->val + start, new_len * sizeof(char));
     self->len = new_len;
 }
 

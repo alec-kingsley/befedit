@@ -39,7 +39,7 @@ struct Buffer {
     uint16_t current_action_momentum;
 };
 
-static void reset_current_action(Buffer *self) {
+static void begin_recording_action(Buffer *self) {
     self->current_redo_keystroke = keystroke_create();
     self->current_undo_keystroke = keystroke_create();
     self->current_action_row = self->cursor_row;
@@ -64,8 +64,6 @@ static void push_current_action(Buffer *self) {
 
     stack_push(self->redo_stack, (void *)redo_action);
     stack_push(self->undo_stack, (void *)undo_action);
-
-    reset_current_action(self);
 }
 
 static void follow_direction(Buffer *self, direction_t direction) {
@@ -106,8 +104,11 @@ static void buffer_insert_cmd(Buffer *self, key_t cmd, bool is_simulated) {
         if (cmd == ESC_KEY) {
             if (!is_simulated) {
                 keystroke_prepend_key(self->current_undo_keystroke, 'i');
+                keystroke_prepend_key(
+                    self->current_undo_keystroke,
+                    direction_as_key(reverse_direction(self->momentum)));
+                push_current_action(self);
             }
-            push_current_action(self);
             self->insert_mode = false;
         }
         /* TODO - allow arrow keys to work */
@@ -157,12 +158,39 @@ static void buffer_insert_cmd(Buffer *self, key_t cmd, bool is_simulated) {
     }
 }
 
+static void execute_keystroke(Buffer *self, Keystroke *keystroke,
+                              bool is_simulated) {
+    size_t i;
+    for (i = 0; i < keystroke_len(keystroke); i++) {
+        buffer_cmd(self, keystroke_get_key(keystroke, i), is_simulated);
+    }
+}
+
 static void redo_last_action(Buffer *self) {
     Action *action = stack_peek(self->redo_stack);
     Keystroke *keystroke = action_get_keystroke(action);
-    size_t i;
-    for (i = 0; i < keystroke_len(keystroke); i++) {
-        buffer_cmd(self, keystroke_get_key(keystroke, i));
+    execute_keystroke(self, keystroke, false);
+}
+
+static void simulate_action(Buffer *self, Action *action) {
+    Keystroke *keystroke = action_get_keystroke(action);
+    self->cursor_col = action_get_col(action);
+    self->cursor_row = action_get_row(action);
+    self->momentum = action_get_momentum(action);
+    execute_keystroke(self, keystroke, true);
+}
+
+static void undo(Buffer *self) {
+    if (stack_len(self->undo_stack) > self->stack_idx) {
+        simulate_action(self, stack_get(self->undo_stack, self->stack_idx));
+        self->stack_idx++;
+    }
+}
+
+static void redo(Buffer *self) {
+    if (self->stack_idx > 0) {
+        simulate_action(self, stack_get(self->redo_stack, self->stack_idx - 1));
+        self->stack_idx--;
     }
 }
 
@@ -172,11 +200,19 @@ static void buffer_normal_cmd(Buffer *self, key_t cmd, bool is_simulated) {
     switch (cmd) {
     case 'i':
         if (!is_simulated) {
+            begin_recording_action(self);
             keystroke_append_key(self->current_redo_keystroke, 'i');
+            keystroke_prepend_key(self->current_undo_keystroke,
+                                  direction_as_key(self->momentum));
+            keystroke_prepend_key(self->current_undo_keystroke,
+                                  direction_as_key(self->momentum));
+            keystroke_prepend_key(self->current_undo_keystroke, ESC_KEY);
         }
         self->insert_mode = true;
         break;
     case '.': redo_last_action(self); break;
+    case 'u': undo(self); break;
+    case 'U': redo(self); break;
     case 'h':
     case ARROW_LEFT:
         direction = LEFT;
@@ -209,11 +245,11 @@ static void buffer_normal_cmd(Buffer *self, key_t cmd, bool is_simulated) {
     }
 }
 
-void buffer_cmd(Buffer *self, key_t cmd) {
+void buffer_cmd(Buffer *self, key_t cmd, bool is_simulated) {
     if (self->insert_mode) {
-        buffer_insert_cmd(self, cmd, false);
+        buffer_insert_cmd(self, cmd, is_simulated);
     } else {
-        buffer_normal_cmd(self, cmd, false);
+        buffer_normal_cmd(self, cmd, is_simulated);
     }
 }
 
@@ -345,8 +381,6 @@ Buffer *buffer_create(const char *filename) {
     if (!self->undo_stack) goto buffer_create_fail;
     self->stack_idx = 0;
 
-    reset_current_action(self);
-
     return self;
 buffer_create_fail:
     buffer_destroy(self);
@@ -360,9 +394,6 @@ void buffer_destroy(Buffer *self) {
 
         stack_destroy(self->redo_stack);
         stack_destroy(self->undo_stack);
-
-        keystroke_destroy(self->current_redo_keystroke);
-        keystroke_destroy(self->current_undo_keystroke);
 
         free(self);
     }

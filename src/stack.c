@@ -51,6 +51,24 @@ void *stack_peek(Stack *self) {
     return self->head->val;
 }
 
+void *stack_get(Stack *self, size_t index) {
+    size_t i = 0;
+    Node *node = self->head;
+    while (i < index) {
+        if (node == NULL) {
+            report_logic_error("attempt to get past stack end");
+            exit(1);
+        }
+        node = node->next;
+        i++;
+    }
+    if (node == NULL) {
+        report_logic_error("attempt to get past stack end");
+        exit(1);
+    }
+    return node->val;
+}
+
 void *stack_pop(Stack *self) {
     Node *old_head = self->head;
     void *val;
