@@ -147,16 +147,15 @@ int main(int argc, char **argv) {
     while (keep_running) {
         update_screen(buffer, mode);
         key = get_key();
-        switch (key) {
-        case ':': keep_running = !command_mode(buffer); break;
-        default:
+        if (key == ':' && mode != INSERT) {
+            keep_running = !command_mode(buffer);
+        } else {
             if (key == 'i' && mode != INSERT) {
                 mode = INSERT;
             } else if (key == ESC_KEY && mode == INSERT) {
                 mode = NORMAL;
             }
             buffer_cmd(buffer, key, false);
-            break;
         }
     }
     printf(CLEAR_SCREEN RESET_CURSOR SHOW_CURSOR);
