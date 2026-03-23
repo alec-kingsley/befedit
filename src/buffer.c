@@ -13,6 +13,28 @@
 
 #define FILENAME "buffer.c"
 
+typedef struct {
+    bool is_some;
+    direction_t unwrap;
+} option_direction_t;
+
+static option_direction_t read_direction(key_t key) {
+    option_direction_t direction;
+    direction.is_some = true;
+    switch (key) {
+    case 'h':
+    case ARROW_LEFT: direction.unwrap = LEFT; break;
+    case 'j':
+    case ARROW_DOWN: direction.unwrap = DOWN; break;
+    case 'k':
+    case ARROW_UP: direction.unwrap = UP; break;
+    case 'l':
+    case ARROW_RIGHT: direction.unwrap = RIGHT; break;
+    default: direction.is_some = false; break;
+    }
+    return direction;
+}
+
 struct Buffer {
     bool new_file;
     char *filename;
@@ -63,6 +85,10 @@ static void push_current_action(Buffer *self) {
         self->stack_idx--;
     }
 
+    /* don't leave mutable references hanging around */
+    self->current_redo_keystroke = NULL;
+    self->current_undo_keystroke = NULL;
+
     stack_push(self->redo_stack, (void *)redo_action);
     stack_push(self->undo_stack, (void *)undo_action);
 }
@@ -92,10 +118,56 @@ static void follow_reverse_momentum(Buffer *self) {
     follow_direction(self, reverse_direction(self->momentum));
 }
 
+static void execute_direction(Buffer *self, direction_t direction) {
+    if (direction != self->momentum) {
+        self->momentum = direction;
+    } else {
+        follow_momentum(self);
+    }
+}
+
+static void prepend_undo_direction(Buffer *self, direction_t direction) {
+    direction_t from_direction = reverse_direction(direction);
+    direction_t to_direction = reverse_direction(self->momentum);
+
+    switch (angle_degrees_between(from_direction, to_direction)) {
+    case 0:
+        keystroke_prepend_key(self->current_undo_keystroke,
+                              direction_as_key(to_direction));
+        break;
+    case 90:
+        keystroke_prepend_key(self->current_undo_keystroke,
+                              direction_as_key(to_direction));
+        keystroke_prepend_key(self->current_undo_keystroke,
+                              direction_as_key(to_direction));
+        keystroke_prepend_key(
+            self->current_undo_keystroke,
+            direction_as_key(reverse_direction(from_direction)));
+        keystroke_prepend_key(
+            self->current_undo_keystroke,
+            direction_as_key(reverse_direction(from_direction)));
+        break;
+    case 180:
+        keystroke_prepend_key(self->current_undo_keystroke,
+                              direction_as_key(to_direction));
+        keystroke_prepend_key(
+            self->current_undo_keystroke,
+            direction_as_key(reverse_direction(from_direction)));
+        keystroke_prepend_key(
+            self->current_undo_keystroke,
+            direction_as_key(reverse_direction(from_direction)));
+        break;
+    default:
+        report_logic_error(FILENAME
+                           ": cannot handle direction angle difference");
+    }
+}
+
 static void buffer_insert_cmd(Buffer *self, key_t cmd, bool is_simulated) {
     uint16_t row = 0, col = 0;
     size_t contents_idx = 0;
     size_t contents_len = string_builder_len(self->contents);
+    option_direction_t direction;
     if (!is_simulated) {
         keystroke_append_key(self->current_redo_keystroke, cmd);
     }
@@ -111,6 +183,14 @@ static void buffer_insert_cmd(Buffer *self, key_t cmd, bool is_simulated) {
                 push_current_action(self);
             }
             self->insert_mode = false;
+        } else {
+            direction = read_direction(cmd);
+            if (direction.is_some) {
+                if (!is_simulated) {
+                    prepend_undo_direction(self, direction.unwrap);
+                }
+                execute_direction(self, direction.unwrap);
+            }
         }
         /* TODO - allow arrow keys to work */
         return;
@@ -201,48 +281,24 @@ static void redo(Buffer *self) {
 }
 
 static void buffer_normal_cmd(Buffer *self, key_t cmd, bool is_simulated) {
-    bool is_direction_cmd = false;
-    direction_t direction;
-    switch (cmd) {
-    case 'i':
-        if (!is_simulated) {
-            begin_recording_action(self);
-            keystroke_append_key(self->current_redo_keystroke, 'i');
-            keystroke_prepend_key(self->current_undo_keystroke, ESC_KEY);
-        }
-        self->insert_mode = true;
-        break;
-    case '.': redo_last_action(self); break;
-    case 'u': undo(self); break;
-    case 'U': redo(self); break;
-    case 'h':
-    case ARROW_LEFT:
-        direction = LEFT;
-        is_direction_cmd = true;
-        break;
-    case 'j':
-    case ARROW_DOWN:
-        is_direction_cmd = true;
+    option_direction_t direction = read_direction(cmd);
 
-        direction = DOWN;
-        break;
-    case 'k':
-    case ARROW_UP:
-        direction = UP;
-        is_direction_cmd = true;
-        break;
-    case 'l':
-    case ARROW_RIGHT:
-        direction = RIGHT;
-        is_direction_cmd = true;
-        break;
-    default: break;
-    }
-    if (is_direction_cmd) {
-        if (direction != self->momentum) {
-            self->momentum = direction;
-        } else {
-            follow_momentum(self);
+    if (direction.is_some) {
+        execute_direction(self, direction.unwrap);
+    } else {
+        switch (cmd) {
+        case 'i':
+            if (!is_simulated) {
+                begin_recording_action(self);
+                keystroke_append_key(self->current_redo_keystroke, 'i');
+                keystroke_prepend_key(self->current_undo_keystroke, ESC_KEY);
+            }
+            self->insert_mode = true;
+            break;
+        case '.': redo_last_action(self); break;
+        case 'u': undo(self); break;
+        case 'U': redo(self); break;
+        default: break;
         }
     }
 }

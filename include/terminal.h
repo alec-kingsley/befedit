@@ -24,6 +24,11 @@ enum special_key {
 typedef uint16_t key_t;
 
 /**
+ * Print key.
+ */
+void print_key(key_t key);
+
+/**
  * Read terminal window size.
  * Must be called before `get_row_ct` or `get_col_ct`.
  */

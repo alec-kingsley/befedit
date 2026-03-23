@@ -25,3 +25,26 @@ key_t direction_as_key(direction_t direction) {
     report_logic_error(FILENAME ": unknown direction");
     exit(1);
 }
+
+direction_t rotate_90_degrees(direction_t direction) {
+    switch (direction) {
+    case UP: return RIGHT;
+    case DOWN: return LEFT;
+    case RIGHT: return DOWN;
+    case LEFT: return UP;
+    }
+    report_logic_error(FILENAME ": unknown direction");
+    exit(1);
+}
+
+uint8_t angle_degrees_between(direction_t a, direction_t b) {
+    uint8_t angle;
+    if (a == b) {
+        angle = 0;
+    } else if (rotate_90_degrees(rotate_90_degrees(a)) == b) {
+        angle = 180;
+    } else {
+        angle = 90;
+    }
+    return angle;
+}
