@@ -25,6 +25,11 @@ void buffer_display(Buffer *self, uint16_t top_offset, uint16_t left_offset,
                     uint16_t row_ct, uint16_t col_ct);
 
 /**
+ * Get name of buffer.
+ */
+char *buffer_name(Buffer *self);
+
+/**
  * Save buffer to file.
  */
 void buffer_save(Buffer *self);

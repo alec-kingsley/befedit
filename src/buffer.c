@@ -312,6 +312,13 @@ void buffer_display(Buffer *self, uint16_t top_offset, uint16_t left_offset,
     string_builder_destroy(display);
 }
 
+/**
+ * Get name of buffer.
+ */
+char *buffer_name(Buffer *self) {
+    return self->filename;
+}
+
 void buffer_save(Buffer *self) {
     FILE *file = fopen(self->filename, "w");
     if (!file) {

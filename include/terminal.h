@@ -51,6 +51,7 @@ bool key_is_printable(key_t key);
 
 /**
  * Append cursor move to `(row, col)` command to `display`
+ * Top left is (1, 1)
  */
 void move_cursor(StringBuilder *display, uint16_t row, uint16_t col);
 

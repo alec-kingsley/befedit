@@ -18,9 +18,16 @@ struct Editor {
     Buffer *buffer;
     List *buffers; /* List<Buffer> */
     size_t buffer_idx;
+    StringBuilder *status_message;
+    bool status_message_is_error;
 };
 
 typedef enum { NORMAL, INSERT, SELECT, COMMAND } mode_t;
+
+static void reset_status_message(Editor *self) {
+    string_builder_set(self->status_message, "");
+    self->status_message_is_error = false;
+}
 
 static void build_footer(StringBuilder *display, mode_t mode) {
     uint16_t col;
@@ -41,6 +48,26 @@ static void build_footer(StringBuilder *display, mode_t mode) {
     string_builder_append(display, RESET);
 }
 
+static void build_status_message(StringBuilder *display, const char *status_message, bool status_message_is_error) {
+    const uint16_t row_ct = get_row_ct(), col_ct = get_col_ct();
+    uint16_t i;
+    move_cursor(display, row_ct, 0);
+    if (status_message_is_error) {
+        string_builder_append(display, RED);
+    }
+    if (strlen(status_message) > col_ct) {
+        for (i = 0; i < col_ct - strlen("..."); i++) {
+            string_builder_append_char(display, status_message[i]);
+        }
+        string_builder_append(display, "...");
+    } else {
+        string_builder_append(display, status_message);
+    }
+    if (status_message_is_error) {
+        string_builder_append(display, RESET);
+    }
+}
+
 static void update_screen(Editor *self, mode_t mode) {
     const uint16_t top_offset = 0, left_offset = 0;
     uint16_t row_ct, col_ct;
@@ -50,6 +77,7 @@ static void update_screen(Editor *self, mode_t mode) {
 
     string_builder_append(display, CLEAR_SCREEN RESET_CURSOR SHOW_CURSOR);
     build_footer(display, mode);
+    build_status_message(display, string_builder_to_string(self->status_message), self->status_message_is_error);
 
     write(STDOUT_FILENO, string_builder_to_string(display),
           string_builder_len(display));
@@ -62,19 +90,30 @@ static void run_command(Editor *self, const char *cmd) {
     bool should_delete = false;
     if (strcmp(cmd, "w") == 0) {
         buffer_save(buffer);
+        string_builder_set(self->status_message, buffer_name(self->buffer));
+        string_builder_append(self->status_message, " written");
     } else if (strcmp(cmd, "x") == 0 || strcmp(cmd, "wq") == 0) {
         buffer_save(buffer);
         should_delete = true;
+        string_builder_set(self->status_message, buffer_name(self->buffer));
+        string_builder_append(self->status_message, " written");
     } else if (strcmp(cmd, "q!") == 0) {
         should_delete = true;
     } else if (strcmp(cmd, "q") == 0) {
         if (!buffer_is_modified(buffer)) {
             should_delete = true;
+        } else {
+            self->status_message_is_error = true;
+            string_builder_set(self->status_message, "cannot close modified buffer");
         }
     } else if (strcmp(cmd, "n") == 0) {
         self->buffer_idx++;
         self->buffer_idx %= list_len(self->buffers);
         self->buffer = list_get(self->buffers, self->buffer_idx);
+    } else {
+        self->status_message_is_error = true;
+        string_builder_set(self->status_message, "unrecognized command: ");
+        string_builder_append(self->status_message, cmd);
     }
     if (should_delete) {
         buffer_destroy(self->buffer);
@@ -166,6 +205,7 @@ void editor_run(Editor *self) {
     while (keep_running) {
         update_screen(self, mode);
         key = get_key();
+        reset_status_message(self);
         if (key == ':' && mode != INSERT) {
             command_mode(self);
             keep_running = !list_is_empty(self->buffers);
@@ -190,7 +230,10 @@ Editor *editor_create(void) {
     }
     self->buffers = list_create((void (*)(void *))buffer_destroy);
     if (!self->buffers) goto editor_create_fail;
+    self->status_message = string_builder_create();
+    if (!self->status_message) goto editor_create_fail;
 
+    reset_status_message(self);
     self->buffer_idx = 0;
 
     return self;
@@ -202,6 +245,7 @@ editor_create_fail:
 void editor_destroy(Editor *self) {
     if (self) {
         list_destroy(self->buffers);
+        string_builder_destroy(self->status_message);
         free(self);
     }
 }
