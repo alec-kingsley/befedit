@@ -6,6 +6,7 @@
 #include "stack.h"
 #include "string_builder.h"
 #include "terminal.h"
+#include <ctype.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -298,6 +299,9 @@ void buffer_display(Buffer *self, uint16_t top_offset, uint16_t left_offset,
             if (contents_char == '\t') {
                 /* TODO - how should tabs be displayed? is this best way? */
                 contents_char = ' ';
+            } else if (!isprint(contents_char)) {
+                /* TODO - what about non-printable characters? */
+                contents_char = '?';
             }
             if (col >= self->left_offset && row >= self->top_offset) {
                 string_builder_append_char(display, contents_char);

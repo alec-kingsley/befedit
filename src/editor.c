@@ -48,7 +48,9 @@ static void build_footer(StringBuilder *display, mode_t mode) {
     string_builder_append(display, RESET);
 }
 
-static void build_status_message(StringBuilder *display, const char *status_message, bool status_message_is_error) {
+static void build_status_message(StringBuilder *display,
+                                 const char *status_message,
+                                 bool status_message_is_error) {
     const uint16_t row_ct = get_row_ct(), col_ct = get_col_ct();
     uint16_t i;
     move_cursor(display, row_ct, 0);
@@ -77,7 +79,9 @@ static void update_screen(Editor *self, mode_t mode) {
 
     string_builder_append(display, CLEAR_SCREEN RESET_CURSOR SHOW_CURSOR);
     build_footer(display, mode);
-    build_status_message(display, string_builder_to_string(self->status_message), self->status_message_is_error);
+    build_status_message(display,
+                         string_builder_to_string(self->status_message),
+                         self->status_message_is_error);
 
     write(STDOUT_FILENO, string_builder_to_string(display),
           string_builder_len(display));
@@ -94,7 +98,8 @@ static void run_command(Editor *self, const char *cmd) {
             string_builder_append(self->status_message, " written");
         } else {
             self->status_message_is_error = true;
-            string_builder_set(self->status_message, "failed to write to buffer");
+            string_builder_set(self->status_message,
+                               "failed to write to buffer");
         }
     } else if (strcmp(cmd, "x") == 0 || strcmp(cmd, "wq") == 0) {
         should_delete = true;
@@ -103,7 +108,8 @@ static void run_command(Editor *self, const char *cmd) {
             string_builder_append(self->status_message, " written");
         } else {
             self->status_message_is_error = true;
-            string_builder_set(self->status_message, "failed to write to buffer");
+            string_builder_set(self->status_message,
+                               "failed to write to buffer");
         }
     } else if (strcmp(cmd, "q!") == 0) {
         should_delete = true;
@@ -112,7 +118,8 @@ static void run_command(Editor *self, const char *cmd) {
             should_delete = true;
         } else {
             self->status_message_is_error = true;
-            string_builder_set(self->status_message, "cannot close modified buffer");
+            string_builder_set(self->status_message,
+                               "cannot close modified buffer");
         }
     } else if (strcmp(cmd, "n") == 0) {
         self->buffer_idx++;
