@@ -1,6 +1,9 @@
 #include "buffer.h"
+#include "action.h"
 #include "direction.h"
+#include "keystroke.h"
 #include "reporter.h"
+#include "stack.h"
 #include "string_builder.h"
 #include "terminal.h"
 #include <stdio.h>
@@ -22,10 +25,51 @@ struct Buffer {
     /* # of rows on the left of the screen hidden */
     uint16_t left_offset;
     bool is_modified;
+    bool insert_mode;
+
+    Stack *redo_stack; /* Stack<Action> */
+    Stack *undo_stack; /* Stack<Action> */
+    /* index within stacks to redo after an undo */
+    size_t stack_idx;
+
+    Keystroke *current_redo_keystroke;
+    Keystroke *current_undo_keystroke;
+    uint16_t current_action_row;
+    uint16_t current_action_col;
+    uint16_t current_action_momentum;
 };
 
-static void follow_momentum(Buffer *self) {
-    switch (self->momentum) {
+static void reset_current_action(Buffer *self) {
+    self->current_redo_keystroke = keystroke_create();
+    self->current_undo_keystroke = keystroke_create();
+    self->current_action_row = self->cursor_row;
+    self->current_action_col = self->cursor_col;
+    self->current_action_momentum = self->momentum;
+}
+
+static void push_current_action(Buffer *self) {
+    const Action *redo_action = action_create(
+        self->current_redo_keystroke, self->current_action_row,
+        self->current_action_col, self->current_action_momentum);
+
+    const Action *undo_action
+        = action_create(self->current_undo_keystroke, self->cursor_row,
+                        self->cursor_col, reverse_direction(self->momentum));
+
+    while (self->stack_idx > 0) {
+        action_destroy(stack_pop(self->redo_stack));
+        action_destroy(stack_pop(self->undo_stack));
+        self->stack_idx--;
+    }
+
+    stack_push(self->redo_stack, (void *)redo_action);
+    stack_push(self->undo_stack, (void *)undo_action);
+
+    reset_current_action(self);
+}
+
+static void follow_direction(Buffer *self, direction_t direction) {
+    switch (direction) {
     case LEFT:
         if (self->cursor_col > 0) {
             self->cursor_col--;
@@ -41,30 +85,31 @@ static void follow_momentum(Buffer *self) {
     }
 }
 
-static void follow_reverse_momentum(Buffer *self) {
-    switch (self->momentum) {
-    case RIGHT:
-        if (self->cursor_col > 0) {
-            self->cursor_col--;
-        }
-        break;
-    case UP: self->cursor_row++; break;
-    case DOWN:
-        if (self->cursor_row > 0) {
-            self->cursor_row--;
-        }
-        break;
-    case LEFT: self->cursor_col++; break;
-    }
+static void follow_momentum(Buffer *self) {
+    follow_direction(self, self->momentum);
 }
 
-void buffer_insert_cmd(Buffer *self, key_t cmd) {
+static void follow_reverse_momentum(Buffer *self) {
+    follow_direction(self, reverse_direction(self->momentum));
+}
+
+static void buffer_insert_cmd(Buffer *self, key_t cmd, bool is_simulated) {
     uint16_t row = 0, col = 0;
     size_t contents_idx = 0;
     size_t contents_len = string_builder_len(self->contents);
+    if (!is_simulated) {
+        keystroke_append_key(self->current_redo_keystroke, cmd);
+    }
     if (cmd == BACKSPACE) {
         follow_reverse_momentum(self);
     } else if (!key_is_printable(cmd)) {
+        if (cmd == ESC_KEY) {
+            if (!is_simulated) {
+                keystroke_prepend_key(self->current_undo_keystroke, 'i');
+            }
+            push_current_action(self);
+            self->insert_mode = false;
+        }
         /* TODO - allow arrow keys to work */
         return;
     }
@@ -99,28 +144,63 @@ void buffer_insert_cmd(Buffer *self, key_t cmd) {
         contents_len++;
     }
     if (cmd == BACKSPACE) {
+        /* TODO - handle current undo keystroke */
         string_builder_set_char(self->contents, contents_idx, ' ');
     } else {
+        if (!is_simulated) {
+            keystroke_prepend_key(
+                self->current_undo_keystroke,
+                string_builder_get_char(self->contents, contents_idx));
+        }
         string_builder_set_char(self->contents, contents_idx, cmd);
         follow_momentum(self);
     }
 }
 
-void buffer_normal_cmd(Buffer *self, key_t cmd) {
-    bool direction_cmd = true;
+static void redo_last_action(Buffer *self) {
+    Action *action = stack_peek(self->redo_stack);
+    Keystroke *keystroke = action_get_keystroke(action);
+    size_t i;
+    for (i = 0; i < keystroke_len(keystroke); i++) {
+        buffer_cmd(self, keystroke_get_key(keystroke, i));
+    }
+}
+
+static void buffer_normal_cmd(Buffer *self, key_t cmd, bool is_simulated) {
+    bool is_direction_cmd = false;
     direction_t direction;
     switch (cmd) {
+    case 'i':
+        if (!is_simulated) {
+            keystroke_append_key(self->current_redo_keystroke, 'i');
+        }
+        self->insert_mode = true;
+        break;
+    case '.': redo_last_action(self); break;
     case 'h':
-    case ARROW_LEFT: direction = LEFT; break;
+    case ARROW_LEFT:
+        direction = LEFT;
+        is_direction_cmd = true;
+        break;
     case 'j':
-    case ARROW_DOWN: direction = DOWN; break;
+    case ARROW_DOWN:
+        is_direction_cmd = true;
+
+        direction = DOWN;
+        break;
     case 'k':
-    case ARROW_UP: direction = UP; break;
+    case ARROW_UP:
+        direction = UP;
+        is_direction_cmd = true;
+        break;
     case 'l':
-    case ARROW_RIGHT: direction = RIGHT; break;
-    default: direction_cmd = false;
+    case ARROW_RIGHT:
+        direction = RIGHT;
+        is_direction_cmd = true;
+        break;
+    default: break;
     }
-    if (direction_cmd) {
+    if (is_direction_cmd) {
         if (direction != self->momentum) {
             self->momentum = direction;
         } else {
@@ -129,10 +209,19 @@ void buffer_normal_cmd(Buffer *self, key_t cmd) {
     }
 }
 
+void buffer_cmd(Buffer *self, key_t cmd) {
+    if (self->insert_mode) {
+        buffer_insert_cmd(self, cmd, false);
+    } else {
+        buffer_normal_cmd(self, cmd, false);
+    }
+}
+
 /**
  * Move frame as necessary to fit cursor.
  */
-static void fit_frame_to_cursor(Buffer *self, uint16_t row_ct, uint16_t col_ct) {
+static void fit_frame_to_cursor(Buffer *self, uint16_t row_ct,
+                                uint16_t col_ct) {
     const uint16_t min_row = self->top_offset;
     const uint16_t max_row = min_row + row_ct - 1;
     const uint16_t min_col = self->left_offset;
@@ -143,13 +232,12 @@ static void fit_frame_to_cursor(Buffer *self, uint16_t row_ct, uint16_t col_ct) 
     } else if (self->cursor_row > max_row) {
         self->top_offset = self->cursor_row - row_ct + 1;
     }
-    
+
     if (self->cursor_col < min_col) {
         self->left_offset = self->cursor_col;
     } else if (self->cursor_col > max_col) {
         self->left_offset = self->cursor_col - col_ct + 1;
     }
-    
 }
 
 void buffer_display(Buffer *self, uint16_t top_offset, uint16_t left_offset,
@@ -166,7 +254,8 @@ void buffer_display(Buffer *self, uint16_t top_offset, uint16_t left_offset,
         if (contents_char == '\n') {
             row++;
             col = 0;
-            move_cursor(display, row + top_offset - self->top_offset + 1, left_offset + 1);
+            move_cursor(display, row + top_offset - self->top_offset + 1,
+                        left_offset + 1);
         } else {
             if (col >= col_ct + self->left_offset) continue;
             if (contents_char == '\t') {
@@ -248,6 +337,15 @@ Buffer *buffer_create(const char *filename) {
     self->left_offset = 0;
     self->momentum = RIGHT;
     self->is_modified = false;
+    self->insert_mode = false;
+
+    self->redo_stack = stack_create((void (*)(void *))action_destroy);
+    if (!self->redo_stack) goto buffer_create_fail;
+    self->undo_stack = stack_create((void (*)(void *))action_destroy);
+    if (!self->undo_stack) goto buffer_create_fail;
+    self->stack_idx = 0;
+
+    reset_current_action(self);
 
     return self;
 buffer_create_fail:
@@ -259,5 +357,13 @@ void buffer_destroy(Buffer *self) {
     if (self) {
         free(self->filename);
         string_builder_destroy(self->contents);
+
+        stack_destroy(self->redo_stack);
+        stack_destroy(self->undo_stack);
+
+        keystroke_destroy(self->current_redo_keystroke);
+        keystroke_destroy(self->current_undo_keystroke);
+
+        free(self);
     }
 }

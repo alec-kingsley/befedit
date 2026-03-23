@@ -12,7 +12,7 @@ struct StringBuilder {
     char *val;   /* string itself */
 };
 
-#define INITIAL_SIZE 32
+#define INITIAL_SIZE (32 * sizeof(char))
 
 /**
  * Double the available size in the `StringBuilder`.
@@ -67,7 +67,8 @@ bool string_builder_set(StringBuilder *self, const char *new) {
     return true;
 }
 
-bool string_builder_insert(StringBuilder *self, size_t index, const char *other) {
+bool string_builder_insert(StringBuilder *self, size_t index,
+                           const char *other) {
     const size_t other_len = strlen(other);
     const size_t new_size = (self->len + other_len) * sizeof(char);
     while (self->size < new_size) {
@@ -75,7 +76,8 @@ bool string_builder_insert(StringBuilder *self, size_t index, const char *other)
             return false;
         }
     }
-    memmove(self->val + index + other_len, self->val + index, self->len - index);
+    memmove(self->val + index + other_len, self->val + index,
+            self->len - index);
     memcpy(self->val + index, other, other_len);
     self->len += other_len;
     return true;
@@ -115,15 +117,13 @@ void string_builder_restrict(StringBuilder *self, size_t start, int32_t end) {
 
 StringBuilder *string_builder_create(void) {
     StringBuilder *new = malloc(sizeof(StringBuilder));
-    if (!new)
-        goto string_builder_create_fail;
+    if (!new) goto string_builder_create_fail;
 
     new->len = 0;
     new->size = INITIAL_SIZE;
 
     new->val = malloc(INITIAL_SIZE);
-    if (!new->val)
-        goto string_builder_create_fail;
+    if (!new->val) goto string_builder_create_fail;
 
     return new;
 

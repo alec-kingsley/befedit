@@ -129,23 +129,10 @@ static bool command_mode(Buffer *buffer) {
     return should_exit;
 }
 
-static void insert_mode(Buffer *buffer) {
-    key_t key;
-    bool keep_running = true;
-
-    while (keep_running) {
-        update_screen(buffer, INSERT);
-        key = get_key();
-        switch (key) {
-        case ESC_KEY: keep_running = false; break;
-        default: buffer_insert_cmd(buffer, key); break;
-        }
-    }
-}
-
 int main(int argc, char **argv) {
     key_t key;
     bool keep_running = true;
+    mode_t mode = NORMAL;
     Buffer *buffer;
     enable_raw_mode();
 
@@ -158,12 +145,18 @@ int main(int argc, char **argv) {
     if (!buffer) return 1;
 
     while (keep_running) {
-        update_screen(buffer, NORMAL);
+        update_screen(buffer, mode);
         key = get_key();
         switch (key) {
         case ':': keep_running = !command_mode(buffer); break;
-        case 'i': insert_mode(buffer); break;
-        default: buffer_normal_cmd(buffer, key); break;
+        default:
+            if (key == 'i' && mode != INSERT) {
+                mode = INSERT;
+            } else if (key == ESC_KEY && mode == INSERT) {
+                mode = NORMAL;
+            }
+            buffer_cmd(buffer, key);
+            break;
         }
     }
     printf(CLEAR_SCREEN RESET_CURSOR SHOW_CURSOR);

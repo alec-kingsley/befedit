@@ -21,6 +21,17 @@ momentum, it changes the momentum to that direction. If it does agree, the curso
 When `i` is pressed to switch to insert mode, as you type it your cursor will move according to the
 momentum. `esc` brings you back to normal mode.
 
+`.` redoes the last action. Changes to momentum or movement, however, do not count as actions.
+
+So the keystroke `itext<esc>j.` would produce
+
+```
+textt
+    e
+    x
+    t
+```
+
 ## Commands
 
 `:` enters command mode. The following commands are currently supported:

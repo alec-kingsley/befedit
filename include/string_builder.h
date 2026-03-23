@@ -66,13 +66,14 @@ bool string_builder_append(StringBuilder *self, const char *other);
 void string_builder_restrict(StringBuilder *self, size_t start, int32_t end);
 
 /**
- * Create a new StringBuilder.
- * Return NULL if error occured.
+ * Create a new `StringBuilder` object.
+ * Return `NULL` on failure.
  */
 StringBuilder *string_builder_create(void);
 
 /**
- * Destroy the StringBuilder.
+ * Destroy `self`.
+ * If `self` is `NULL`, does nothing.
  */
 void string_builder_destroy(StringBuilder *self);
 

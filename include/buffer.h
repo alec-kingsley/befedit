@@ -8,14 +8,9 @@
 typedef struct Buffer Buffer;
 
 /**
- * Send insert mode command to buffer.
+ * Send command to buffer.
  */
-void buffer_insert_cmd(Buffer *self, key_t cmd);
-
-/**
- * Send normal mode command to buffer.
- */
-void buffer_normal_cmd(Buffer *self, key_t cmd);
+void buffer_cmd(Buffer *self, key_t cmd);
 
 /**
  * Display buffer in a region on the screen.
