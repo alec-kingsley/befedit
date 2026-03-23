@@ -45,6 +45,16 @@ textt
     t
 ```
 
+### Why does it think the buffer is modified after undoing everything?
+
+Occasionally, the editor will add spaces in addition to the characters you type as scaffolding to
+put your characters in the correct positions.
+
+`undo`, however, does not remove these spaces.
+
+For safety, the only time a buffer will count as unmodified is if it's been written with `:w` or
+if it's been unmodified since opening.
+
 ## Commands
 
 `:` enters command mode. The following commands are currently supported:
