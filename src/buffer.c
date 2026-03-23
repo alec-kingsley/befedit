@@ -181,8 +181,13 @@ static void simulate_action(Buffer *self, Action *action) {
 }
 
 static void undo(Buffer *self) {
+    Action *undo_action, *redo_action;
     if (stack_len(self->undo_stack) > self->stack_idx) {
-        simulate_action(self, stack_get(self->undo_stack, self->stack_idx));
+        undo_action = stack_get(self->undo_stack, self->stack_idx);
+        redo_action = stack_get(self->redo_stack, self->stack_idx);
+        simulate_action(self, undo_action);
+        self->cursor_col = action_get_col(redo_action);
+        self->cursor_row = action_get_row(redo_action);
         self->stack_idx++;
     }
 }
@@ -202,10 +207,6 @@ static void buffer_normal_cmd(Buffer *self, key_t cmd, bool is_simulated) {
         if (!is_simulated) {
             begin_recording_action(self);
             keystroke_append_key(self->current_redo_keystroke, 'i');
-            keystroke_prepend_key(self->current_undo_keystroke,
-                                  direction_as_key(self->momentum));
-            keystroke_prepend_key(self->current_undo_keystroke,
-                                  direction_as_key(self->momentum));
             keystroke_prepend_key(self->current_undo_keystroke, ESC_KEY);
         }
         self->insert_mode = true;
