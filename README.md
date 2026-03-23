@@ -8,7 +8,7 @@ A modal text editor for 2D languages, such as Befunge or ASCII art.
 
 Run `./install.sh` to build and install. The program can then be run with `befedit`
 
-Alternatively, the `make` command will place the `befedit` binary in `bin/make`.
+Alternatively, the `make` command will place the `befedit` binary in `./bin/befedit`.
 
 ## How it Works
 
