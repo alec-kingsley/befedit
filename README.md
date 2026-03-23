@@ -10,6 +10,12 @@ Run `./install.sh` to build and install. The program can then be run with `befed
 
 Alternatively, the `make` command will place the `befedit` binary in `./bin/befedit`.
 
+## Usage
+
+```sh
+befedit file1 file2...
+```
+
 ## How it Works
 
 Movement is done with `h`, `j`, `k`, and `l` or arrow keys.
@@ -24,9 +30,9 @@ momentum. `esc` brings you back to normal mode.
 
 ## Normal Mode actions
 
-- `.` - redo previous action (unlike other editors, movement does NOT count as an action)
-- `u` - undo previous action
-- `U` - redo undid action
+  - `.` - redo previous action (unlike other editors, movement does NOT count as an action)
+  - `u` - undo previous action
+  - `U` - redo undid action
 
 Example of `.`:
 
@@ -43,9 +49,10 @@ textt
 
 `:` enters command mode. The following commands are currently supported:
 
- - `q` - quit (won't work with unsaved changes)
- - `q!` - quit without saving
- - `wq` - save and quit
- - `x` - save and quit
- - `w` - save
+ - `q` - close buffer (won't work with unsaved changes)
+ - `q!` - close buffer without saving
+ - `wq` - save and close buffer
+ - `x` - save and close buffer
+ - `w` - save buffer
+ - `n` - next buffer
 
