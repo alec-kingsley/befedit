@@ -18,9 +18,13 @@ struct {
     struct termios orig_termios;
 } g_term;
 
-uint16_t get_row_ct(void) { return g_term.row_ct; }
+uint16_t get_row_ct(void) {
+    return g_term.row_ct;
+}
 
-uint16_t get_col_ct(void) { return g_term.col_ct; }
+uint16_t get_col_ct(void) {
+    return g_term.col_ct;
+}
 
 void update_window_size(void) {
     struct winsize ws;
@@ -127,6 +131,9 @@ void enable_raw_mode(void) {
 
     /* disable showing charcters as they're typed */
     raw.c_lflag &= ~ECHO;
+
+    /* disable ctrl+c and ctrl+z */
+    raw.c_lflag &= ~ISIG;
 
     /* disable canonical mode (read byte-by-byte) */
     raw.c_lflag &= ~ICANON;
