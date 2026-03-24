@@ -24,15 +24,21 @@ Unlike other editors, however, these also control a "momentum" vector.
 When the editor opens, the momentum is set to `right`. If the movement key disagrees with the
 momentum, it changes the momentum to that direction. If it does agree, the cursor will move.
 
-When `i` is pressed to switch to insert mode, as you type it your cursor will move according to the
+Ininsert mode, as you type, your cursor will move according to the
 momentum. `esc` brings you back to normal mode.
 
 
 ## Normal Mode actions
 
-  - `.` - redo previous action (unlike other editors, movement does NOT count as an action)
-  - `u` - undo previous action
-  - `U` - redo undid action
+ - `i` - enter insert mode at current character
+ - `a` - enter insert mode after current character
+ - `I` - enter insert mode at start of line
+ - `A` - enter insert mode at end of line
+ - `.` - redo previous action (unlike other editors, movement does NOT count as an action)
+ - `u` - undo previous action
+ - `U` - redo undid action
+ - `^` - jump to start of line
+ - `$` - jump to end of line
 
 Example of `.`:
 
@@ -44,6 +50,12 @@ textt
     x
     t
 ```
+
+Note that "start of line" and "end of line" refer to the first and last locations of non-whitespace
+characters in the current vertical or horizontal line.
+
+The current momentum vector will point away from the start of the line and towards the end of the
+line. The orientation of the line is defined based on this.
 
 ### Why does it think the buffer is modified after undoing everything?
 

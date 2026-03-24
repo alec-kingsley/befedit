@@ -280,6 +280,96 @@ static void redo(Buffer *self) {
     }
 }
 
+static StringBuilder *snatch_horizontal_line(Buffer *self) {
+    size_t contents_idx = 0;
+    size_t row = 0;
+    const size_t contents_len = string_builder_len(self->contents);
+    StringBuilder *line = string_builder_create();
+    while (contents_idx < contents_len && row < self->cursor_row) {
+        if (string_builder_get_char(self->contents, contents_idx) == '\n') {
+            row++;
+        }
+        contents_idx++;
+    }
+    if (row == self->cursor_row) {
+        while (contents_idx < contents_len) {
+            if (string_builder_get_char(self->contents, contents_idx) == '\n') {
+                break;
+            }
+            string_builder_append_char(
+                line, string_builder_get_char(self->contents, contents_idx));
+            contents_idx++;
+        }
+    }
+    return line;
+}
+
+static StringBuilder *snatch_vertical_line(Buffer *self) {
+    size_t contents_idx;
+    size_t col = 0;
+    const size_t contents_len = string_builder_len(self->contents);
+    StringBuilder *line = string_builder_create();
+    for (contents_idx = 0; contents_idx < contents_len; contents_idx++) {
+        if (string_builder_get_char(self->contents, contents_idx) == '\n') {
+            if (col <= self->cursor_col) {
+                string_builder_append_char(line, ' ');
+            }
+            col = 0;
+            continue;
+        }
+        if (col == self->cursor_col) {
+            string_builder_append_char(
+                line, string_builder_get_char(self->contents, contents_idx));
+        }
+        col++;
+    }
+    return line;
+}
+
+/**
+ * Get string representation of current line following momentum.
+ */
+static StringBuilder *snatch_line(Buffer *self) {
+    if (angle_degrees_between(self->momentum, DOWN) == 90) {
+        return snatch_horizontal_line(self);
+    } else {
+        return snatch_vertical_line(self);
+    }
+}
+
+/**
+ * Jump to one or the other end of the line.
+ * Jump to start of the line if `start` is true, else the other end.
+ */
+static void jump_line_end(Buffer *self, bool start) {
+    StringBuilder *line = snatch_line(self);
+    size_t line_end;
+    size_t i;
+    const size_t line_len = string_builder_len(line);
+    char c;
+    bool is_line_start
+        = start == (self->momentum == RIGHT || self->momentum == DOWN);
+
+    line_end = 0;
+
+    for (i = is_line_start ? 0 : line_len - 1;
+         (is_line_start && i < line_len) || (!is_line_start && i > 0);
+         i += is_line_start ? 1 : -1) {
+        c = string_builder_get_char(line, i);
+        if (c != ' ' && c != '\t') {
+            line_end = i;
+            break;
+        }
+    }
+
+    if (angle_degrees_between(self->momentum, DOWN) == 90) {
+        self->cursor_col = line_end;
+    } else {
+        self->cursor_row = line_end;
+    }
+    string_builder_destroy(line);
+}
+
 static void buffer_normal_cmd(Buffer *self, key_t cmd, bool is_simulated) {
     option_direction_t direction = read_direction(cmd);
 
@@ -288,13 +378,25 @@ static void buffer_normal_cmd(Buffer *self, key_t cmd, bool is_simulated) {
     } else {
         switch (cmd) {
         case 'i':
+        case 'a':
+        case 'A':
+        case 'I':
             if (!is_simulated) {
                 begin_recording_action(self);
-                keystroke_append_key(self->current_redo_keystroke, 'i');
+                if (cmd == 'a') {
+                    follow_momentum(self);
+                } else if (cmd == 'A') {
+                    jump_line_end(self, false);
+                } else if (cmd == 'I') {
+                    jump_line_end(self, true);
+                }
+                keystroke_append_key(self->current_redo_keystroke, cmd);
                 keystroke_prepend_key(self->current_undo_keystroke, ESC_KEY);
             }
             self->insert_mode = true;
             break;
+        case '$': jump_line_end(self, false); break;
+        case '^': jump_line_end(self, true); break;
         case '.': redo_last_action(self); break;
         case 'u': undo(self); break;
         case 'U': redo(self); break;
