@@ -24,7 +24,7 @@ Unlike other editors, however, these also control a "momentum" vector.
 When the editor opens, the momentum is set to `right`. If the movement key disagrees with the
 momentum, it changes the momentum to that direction. If it does agree, the cursor will move.
 
-Ininsert mode, as you type, your cursor will move according to the
+In insert mode, as you type, your cursor will move according to the
 momentum. `esc` brings you back to normal mode.
 
 
