@@ -4,6 +4,8 @@ A modal text editor for 2D languages, such as Befunge, ><>, or even ASCII art.
 
 ![demo](./assets/demo.gif)
 
+![yank demo](./assets/yankdemo.gif)
+
 ## Installation
 
 Run `./install.sh` to build and install. The program can then be run with `befedit`
