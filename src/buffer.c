@@ -55,6 +55,7 @@ struct Buffer {
     /* index within stacks to redo after an undo */
     size_t stack_idx;
 
+    bool is_recording;
     Keystroke *current_redo_keystroke;
     Keystroke *current_undo_keystroke;
     uint16_t current_action_row;
@@ -90,6 +91,7 @@ static size_t get_row_contents_idx(Buffer *self, size_t row) {
 }
 
 static void begin_recording_action(Buffer *self) {
+    self->is_recording = true;
     self->current_redo_keystroke = keystroke_create();
     self->current_undo_keystroke = keystroke_create();
     self->current_action_row = self->cursor_row;
@@ -118,6 +120,8 @@ static void push_current_action(Buffer *self) {
 
     stack_push(self->redo_stack, (void *)redo_action);
     stack_push(self->undo_stack, (void *)undo_action);
+
+    self->is_recording = false;
 }
 
 static void follow_direction(Buffer *self, direction_t direction) {
@@ -182,9 +186,8 @@ static void prepend_undo_direction(Buffer *self, direction_t direction) {
     }
 }
 
-static void execute_direction(Buffer *self, direction_t direction,
-                              bool is_simulated) {
-    if (!is_simulated) {
+static void execute_direction(Buffer *self, direction_t direction) {
+    if (self->is_recording) {
         prepend_undo_direction(self, direction);
     }
     if (direction != self->momentum) {
@@ -194,14 +197,14 @@ static void execute_direction(Buffer *self, direction_t direction,
     }
 }
 
-static void buffer_insert_enter(Buffer *self, bool is_simulated) {
+static void buffer_insert_enter(Buffer *self) {
     direction_t forwards = self->momentum;
     direction_t backwards = reverse_direction(self->momentum);
     direction_t next_line = rotate_90_degrees(self->momentum);
     bool keep_following = true;
-    execute_direction(self, next_line, is_simulated);
-    execute_direction(self, next_line, is_simulated);
-    execute_direction(self, backwards, is_simulated);
+    execute_direction(self, next_line);
+    execute_direction(self, next_line);
+    execute_direction(self, backwards);
     while (keep_following) {
         switch (forwards) {
         case UP:
@@ -219,28 +222,28 @@ static void buffer_insert_enter(Buffer *self, bool is_simulated) {
         default: report_logic_error(FILENAME ": unknown direction"); exit(1);
         }
         if (keep_following) {
-            execute_direction(self, backwards, is_simulated);
+            execute_direction(self, backwards);
         }
     }
-    execute_direction(self, forwards, is_simulated);
+    execute_direction(self, forwards);
 }
 
-static void buffer_insert_cmd(Buffer *self, key_t cmd, bool is_simulated) {
+static void buffer_insert_cmd(Buffer *self, key_t cmd) {
     uint16_t row = 0, col = 0;
     size_t contents_idx = 0;
     size_t contents_len = string_builder_len(self->contents);
     option_direction_t direction;
-    if (!is_simulated) {
+    if (self->is_recording) {
         keystroke_append_key(self->current_redo_keystroke, cmd);
     }
     if (cmd == BACKSPACE) {
         follow_reverse_momentum(self);
     } else if (cmd == '\n') {
-        buffer_insert_enter(self, is_simulated);
+        buffer_insert_enter(self);
         return;
     } else if (!key_is_printable(cmd)) {
         if (cmd == ESC_KEY) {
-            if (!is_simulated) {
+            if (self->is_recording) {
                 keystroke_prepend_key(self->current_undo_keystroke, 'i');
                 keystroke_prepend_key(
                     self->current_undo_keystroke,
@@ -251,7 +254,7 @@ static void buffer_insert_cmd(Buffer *self, key_t cmd, bool is_simulated) {
         } else {
             direction = read_direction(cmd);
             if (direction.is_some) {
-                execute_direction(self, direction.unwrap, is_simulated);
+                execute_direction(self, direction.unwrap);
             }
         }
         return;
@@ -290,7 +293,7 @@ static void buffer_insert_cmd(Buffer *self, key_t cmd, bool is_simulated) {
         /* TODO - handle current undo keystroke */
         string_builder_set_char(self->contents, contents_idx, ' ');
     } else {
-        if (!is_simulated) {
+        if (self->is_recording) {
             keystroke_prepend_key(
                 self->current_undo_keystroke,
                 string_builder_get_char(self->contents, contents_idx));
@@ -308,10 +311,10 @@ static void execute_keystroke(Buffer *self, Keystroke *keystroke,
     }
 }
 
-static void redo_last_action(Buffer *self) {
+static void redo_last_action(Buffer *self, bool is_simulated) {
     Action *action = stack_peek(self->redo_stack);
     Keystroke *keystroke = action_get_keystroke(action);
-    execute_keystroke(self, keystroke, false);
+    execute_keystroke(self, keystroke, is_simulated);
 }
 
 static void simulate_action(Buffer *self, Action *action) {
@@ -512,7 +515,7 @@ static void yank_selection(Buffer *self) {
     keystroke_append_key(self->yanked, ESC_KEY);
 }
 
-static void cut_selection(Buffer *self) {
+static void cut_selection(Buffer *self, bool is_simulated) {
     Keystroke *delete_selection = keystroke_create();
     key_t key;
     size_t i;
@@ -532,13 +535,11 @@ static void cut_selection(Buffer *self) {
     }
     keystroke_append_key(delete_selection, ESC_KEY);
 
-    begin_recording_action(self);
-
     self->cursor_row = selection.top_row;
     self->cursor_col = selection.left_col;
     self->momentum = RIGHT;
 
-    execute_keystroke(self, delete_selection, false);
+    execute_keystroke(self, delete_selection, is_simulated);
     keystroke_destroy(delete_selection);
 }
 
@@ -550,7 +551,7 @@ static void buffer_normal_cmd(Buffer *self, key_t cmd, bool is_simulated) {
 
     if (direction.is_some) {
         if (self->mode == NORMAL) {
-            execute_direction(self, direction.unwrap, true);
+            execute_direction(self, direction.unwrap);
         } else {
             self->momentum = direction.unwrap;
             follow_momentum(self);
@@ -570,15 +571,17 @@ static void buffer_normal_cmd(Buffer *self, key_t cmd, bool is_simulated) {
         case 'I':
             if (!is_simulated) {
                 begin_recording_action(self);
-                if (cmd == 'a') {
-                    follow_momentum(self);
-                } else if (cmd == 'A') {
-                    jump_line_end(self, false);
-                } else if (cmd == 'I') {
-                    jump_line_end(self, true);
-                }
-                self->insert_start_row = self->cursor_row;
-                self->insert_start_col = self->cursor_col;
+            }
+            if (cmd == 'a') {
+                follow_momentum(self);
+            } else if (cmd == 'A') {
+                jump_line_end(self, false);
+            } else if (cmd == 'I') {
+                jump_line_end(self, true);
+            }
+            self->insert_start_row = self->cursor_row;
+            self->insert_start_col = self->cursor_col;
+            if (!is_simulated) {
                 keystroke_append_key(self->current_redo_keystroke, cmd);
                 keystroke_prepend_key(self->current_undo_keystroke, ESC_KEY);
             }
@@ -586,7 +589,7 @@ static void buffer_normal_cmd(Buffer *self, key_t cmd, bool is_simulated) {
             break;
         case '$': jump_line_end(self, false); break;
         case '^': jump_line_end(self, true); break;
-        case '.': redo_last_action(self); break;
+        case '.': redo_last_action(self, is_simulated); break;
         case 'u':
             self->mode = NORMAL;
             undo(self);
@@ -599,11 +602,16 @@ static void buffer_normal_cmd(Buffer *self, key_t cmd, bool is_simulated) {
             self->mode = NORMAL;
             if (self->yanked) {
                 begin_recording_action(self);
-                execute_keystroke(self, self->yanked, false);
+                execute_keystroke(self, self->yanked, is_simulated);
             }
             break;
         case 'y': yank_selection(self); break;
-        case 'd': cut_selection(self); break;
+        case 'd':
+            if (!is_simulated) {
+                begin_recording_action(self);
+            }
+            cut_selection(self, is_simulated);
+            break;
         default: break;
         }
     }
@@ -611,7 +619,7 @@ static void buffer_normal_cmd(Buffer *self, key_t cmd, bool is_simulated) {
 
 void buffer_cmd(Buffer *self, key_t cmd, bool is_simulated) {
     if (self->mode == INSERT) {
-        buffer_insert_cmd(self, cmd, is_simulated);
+        buffer_insert_cmd(self, cmd);
     } else {
         buffer_normal_cmd(self, cmd, is_simulated);
     }
@@ -780,6 +788,7 @@ Buffer *buffer_create(const char *filename) {
     self->is_modified = false;
     self->mode = NORMAL;
 
+    self->is_recording = false;
     self->current_redo_keystroke = NULL;
     self->current_undo_keystroke = NULL;
 
