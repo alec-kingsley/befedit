@@ -66,6 +66,11 @@ bool string_builder_append(StringBuilder *self, const char *other);
 void string_builder_restrict(StringBuilder *self, size_t start, int32_t end);
 
 /**
+ * Safely print `self`.
+ */
+void string_builder_print(StringBuilder *self);
+
+/**
  * Create a new `StringBuilder` object.
  * Return `NULL` on failure.
  */

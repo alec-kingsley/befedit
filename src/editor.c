@@ -85,8 +85,7 @@ static void update_screen(Editor *self, mode_t mode) {
 
     buffer_build_display(self->buffer, display, top_offset, left_offset, row_ct - 2, col_ct);
 
-    write(STDOUT_FILENO, string_builder_to_string(display),
-          string_builder_len(display));
+    string_builder_print(display);
     string_builder_destroy(display);
 }
 
@@ -163,8 +162,7 @@ static void display_command(const char *cmd) {
     }
 
     string_builder_append(display, RESET);
-    write(STDOUT_FILENO, string_builder_to_string(display),
-          string_builder_len(display));
+    string_builder_print(display);
     string_builder_destroy(display);
 }
 

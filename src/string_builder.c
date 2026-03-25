@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #define FILENAME "string_builder.c"
 
@@ -115,6 +116,20 @@ void string_builder_restrict(StringBuilder *self, size_t start, int32_t end) {
     const size_t new_len = end_pos - start;
     memmove(self->val, self->val + start, new_len * sizeof(char));
     self->len = new_len;
+}
+
+#define CHUNK_SIZE 1024
+
+void string_builder_print(StringBuilder *self) {
+    size_t bytes_left = self->len;
+    size_t bytes_to_print;
+    char *ptr = self->val;
+    while (bytes_left > 0) {
+        bytes_to_print = bytes_left < CHUNK_SIZE ? bytes_left : CHUNK_SIZE;
+        write(STDOUT_FILENO, ptr, bytes_to_print);
+        ptr += bytes_to_print;
+        bytes_left -= bytes_to_print;
+    }
 }
 
 StringBuilder *string_builder_create(void) {

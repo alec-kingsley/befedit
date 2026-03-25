@@ -710,7 +710,7 @@ void buffer_build_display(Buffer *self, StringBuilder *display,
             /* TODO - what about non-printable characters? */
             contents_char = '?';
         }
-        if (self->left_offset <= col && col <= self->left_offset + col_ct
+        if (self->left_offset <= col && col < self->left_offset + col_ct
             && self->top_offset <= row) {
             if (is_selected(self, row, col)) {
                 string_builder_append(display, HIGHLIGHT);
