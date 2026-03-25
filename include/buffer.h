@@ -23,8 +23,9 @@ void buffer_cmd(Buffer *self, key_t cmd, bool is_simulated);
  *
  * (0, 0) represents the top left corner.
  */
-void buffer_display(Buffer *self, uint16_t top_offset, uint16_t left_offset,
-                    uint16_t row_ct, uint16_t col_ct);
+void buffer_build_display(Buffer *self, StringBuilder *display,
+                          uint16_t top_offset, uint16_t left_offset,
+                          uint16_t row_ct, uint16_t col_ct);
 
 /**
  * Get name of buffer.

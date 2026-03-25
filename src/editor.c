@@ -76,15 +76,18 @@ static void update_screen(Editor *self, mode_t mode) {
     row_ct = get_row_ct(), col_ct = get_col_ct();
 
     string_builder_append(display, CLEAR_SCREEN RESET_CURSOR SHOW_CURSOR);
+
     build_footer(display, mode);
     build_status_message(display,
                          string_builder_to_string(self->status_message),
                          self->status_message_is_error);
+    string_builder_append(display, RESET);
+
+    buffer_build_display(self->buffer, display, top_offset, left_offset, row_ct - 2, col_ct);
 
     write(STDOUT_FILENO, string_builder_to_string(display),
           string_builder_len(display));
     string_builder_destroy(display);
-    buffer_display(self->buffer, top_offset, left_offset, row_ct - 2, col_ct);
 }
 
 static void run_command(Editor *self, const char *cmd) {

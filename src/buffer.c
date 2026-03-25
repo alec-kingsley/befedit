@@ -675,12 +675,12 @@ static bool is_selected(Buffer *self, size_t row, size_t col) {
     return is_row_selected && is_col_selected;
 }
 
-void buffer_display(Buffer *self, uint16_t top_offset, uint16_t left_offset,
-                    uint16_t row_ct, uint16_t col_ct) {
+void buffer_build_display(Buffer *self, StringBuilder *display,
+                          uint16_t top_offset, uint16_t left_offset,
+                          uint16_t row_ct, uint16_t col_ct) {
     uint16_t row = 0, col = 0;
     size_t contents_idx = 0;
     const size_t contents_len = string_builder_len(self->contents);
-    StringBuilder *display = string_builder_create();
     char contents_char;
     fit_frame_to_cursor(self, row_ct, col_ct);
     move_cursor(display, top_offset + 1, left_offset + 1);
@@ -724,9 +724,6 @@ void buffer_display(Buffer *self, uint16_t top_offset, uint16_t left_offset,
     }
     move_cursor(display, top_offset + 1 + self->cursor_row - self->top_offset,
                 left_offset + 1 + self->cursor_col - self->left_offset);
-    write(STDOUT_FILENO, string_builder_to_string(display),
-          string_builder_len(display));
-    string_builder_destroy(display);
 }
 
 /**
