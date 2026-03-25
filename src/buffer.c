@@ -46,7 +46,7 @@ struct Buffer {
     size_t cursor_col;
     /* # of rows on the top of the screen hidden */
     uint16_t top_offset;
-    /* # of rows on the left of the screen hidden */
+    /* # of columns on the left of the screen hidden */
     uint16_t left_offset;
     bool is_modified;
 
@@ -570,6 +570,9 @@ static void buffer_normal_cmd(Buffer *self, key_t cmd, bool is_simulated) {
         }
     } else {
         switch (cmd) {
+        case ESC_KEY:
+            self->mode = NORMAL;
+            break;
         case 'v':
             if (self->mode == NORMAL) {
                 self->selection_start_col = self->cursor_col;
@@ -614,7 +617,7 @@ static void buffer_normal_cmd(Buffer *self, key_t cmd, bool is_simulated) {
             self->mode = NORMAL;
             if (self->yanked) {
                 begin_recording_action(self);
-                execute_keystroke(self, self->yanked, is_simulated);
+                execute_keystroke(self, self->yanked, true);
             }
             break;
         case 'y': yank_selection(self); break;
