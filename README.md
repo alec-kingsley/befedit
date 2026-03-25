@@ -39,6 +39,7 @@ momentum. `esc` brings you back to normal mode.
  - `U` - redo undid action
  - `^` - jump to start of line
  - `$` - jump to end of line
+ - `v` - enter select mode
 
 Example of `.`:
 
@@ -56,6 +57,11 @@ characters in the current vertical or horizontal line.
 
 The current momentum vector will point away from the start of the line and towards the end of the
 line. The orientation of the line is defined based on this.
+
+## Select mode interactions
+
+ - hjkl and arrow keys - move around (no momentum involved)
+ - `<esc>` - exit select mode
 
 ### Why does it think the buffer is modified after undoing everything?
 

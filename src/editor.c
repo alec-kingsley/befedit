@@ -22,8 +22,6 @@ struct Editor {
     bool status_message_is_error;
 };
 
-typedef enum { NORMAL, INSERT, SELECT, COMMAND } mode_t;
-
 static void reset_status_message(Editor *self) {
     string_builder_set(self->status_message, "");
     self->status_message_is_error = false;
@@ -227,8 +225,10 @@ void editor_run(Editor *self) {
         } else {
             if (key == 'i' && mode != INSERT) {
                 mode = INSERT;
-            } else if (key == ESC_KEY && mode == INSERT) {
+            } else if (key == ESC_KEY && mode != NORMAL) {
                 mode = NORMAL;
+            } else if (key == 'v' && mode == NORMAL) {
+                mode = SELECT;
             }
             buffer_cmd(self->buffer, key, false);
         }

@@ -5,6 +5,8 @@
 #include "terminal.h"
 #include <stdint.h>
 
+typedef enum { NORMAL, INSERT, SELECT, COMMAND } mode_t;
+
 typedef struct Buffer Buffer;
 
 /**
