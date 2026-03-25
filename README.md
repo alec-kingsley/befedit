@@ -42,6 +42,8 @@ momentum. `esc` brings you back to normal mode.
  - `$` - jump to end of line
  - `v` - enter select mode
  - `p` - paste yanked selection (rotates according to momentum)
+ - `d` - delete current character
+ - `y` - yank current character
 
 Example of `.`:
 
@@ -64,6 +66,7 @@ line. The orientation of the line is defined based on this.
 
  - hjkl and arrow keys - move around (no momentum involved)
  - `y` - yank a selection
+ - `d` - delete a selection
  - `<esc>` - exit select mode
 
 ### Why does it think the buffer is modified after undoing everything?

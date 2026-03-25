@@ -432,54 +432,6 @@ static void jump_line_end(Buffer *self, bool start) {
     string_builder_destroy(line);
 }
 
-static void buffer_normal_cmd(Buffer *self, key_t cmd, bool is_simulated) {
-    option_direction_t direction = read_direction(cmd);
-
-    if (direction.is_some) {
-        execute_direction(self, direction.unwrap, true);
-    } else {
-        switch (cmd) {
-        case 'v':
-            self->selection_start_col = self->cursor_col;
-            self->selection_start_row = self->cursor_row;
-            self->mode = SELECT;
-            break;
-        case 'i':
-        case 'a':
-        case 'A':
-        case 'I':
-            if (!is_simulated) {
-                begin_recording_action(self);
-                if (cmd == 'a') {
-                    follow_momentum(self);
-                } else if (cmd == 'A') {
-                    jump_line_end(self, false);
-                } else if (cmd == 'I') {
-                    jump_line_end(self, true);
-                }
-                self->insert_start_row = self->cursor_row;
-                self->insert_start_col = self->cursor_col;
-                keystroke_append_key(self->current_redo_keystroke, cmd);
-                keystroke_prepend_key(self->current_undo_keystroke, ESC_KEY);
-            }
-            self->mode = INSERT;
-            break;
-        case '$': jump_line_end(self, false); break;
-        case '^': jump_line_end(self, true); break;
-        case '.': redo_last_action(self); break;
-        case 'u': undo(self); break;
-        case 'U': redo(self); break;
-        case 'p':
-            if (self->yanked) {
-                begin_recording_action(self);
-                execute_keystroke(self, self->yanked, false);
-            }
-            break;
-        default: break;
-        }
-    }
-}
-
 typedef struct {
     size_t top_row;
     size_t left_col;
@@ -560,24 +512,108 @@ static void yank_selection(Buffer *self) {
     keystroke_append_key(self->yanked, ESC_KEY);
 }
 
-static void buffer_select_cmd(Buffer *self, key_t cmd) {
+static void cut_selection(Buffer *self) {
+    Keystroke *delete_selection = keystroke_create();
+    key_t key;
+    size_t i;
+    size_t yanked_len;
+    selection_t selection = get_selection(self);
+    yank_selection(self);
+    yanked_len = keystroke_len(self->yanked);
+
+    keystroke_append_key(delete_selection, 'i');
+    for (i = 1; i < yanked_len - 1; i++) {
+        key = keystroke_get_key(self->yanked, i);
+        if (key == '\n' || (!isprint(key) && read_direction(key).is_some)) {
+            keystroke_append_key(delete_selection, key);
+        } else {
+            keystroke_append_key(delete_selection, ' ');
+        }
+    }
+    keystroke_append_key(delete_selection, ESC_KEY);
+
+    begin_recording_action(self);
+
+    self->cursor_row = selection.top_row;
+    self->cursor_col = selection.left_col;
+    self->momentum = RIGHT;
+
+    execute_keystroke(self, delete_selection, false);
+    keystroke_destroy(delete_selection);
+}
+
+/**
+ * Either a normal or a select command.
+ */
+static void buffer_normal_cmd(Buffer *self, key_t cmd, bool is_simulated) {
     option_direction_t direction = read_direction(cmd);
+
     if (direction.is_some) {
-        self->momentum = direction.unwrap;
-        follow_momentum(self);
-    } else if (cmd == ESC_KEY) {
-        self->mode = NORMAL;
-    } else if (cmd == 'y') {
-        yank_selection(self);
+        if (self->mode == NORMAL) {
+            execute_direction(self, direction.unwrap, true);
+        } else {
+            self->momentum = direction.unwrap;
+            follow_momentum(self);
+        }
+    } else {
+        switch (cmd) {
+        case 'v':
+            if (self->mode == NORMAL) {
+                self->selection_start_col = self->cursor_col;
+                self->selection_start_row = self->cursor_row;
+                self->mode = SELECT;
+            }
+            break;
+        case 'i':
+        case 'a':
+        case 'A':
+        case 'I':
+            if (!is_simulated) {
+                begin_recording_action(self);
+                if (cmd == 'a') {
+                    follow_momentum(self);
+                } else if (cmd == 'A') {
+                    jump_line_end(self, false);
+                } else if (cmd == 'I') {
+                    jump_line_end(self, true);
+                }
+                self->insert_start_row = self->cursor_row;
+                self->insert_start_col = self->cursor_col;
+                keystroke_append_key(self->current_redo_keystroke, cmd);
+                keystroke_prepend_key(self->current_undo_keystroke, ESC_KEY);
+            }
+            self->mode = INSERT;
+            break;
+        case '$': jump_line_end(self, false); break;
+        case '^': jump_line_end(self, true); break;
+        case '.': redo_last_action(self); break;
+        case 'u':
+            self->mode = NORMAL;
+            undo(self);
+            break;
+        case 'U':
+            self->mode = NORMAL;
+            redo(self);
+            break;
+        case 'p':
+            self->mode = NORMAL;
+            if (self->yanked) {
+                begin_recording_action(self);
+                execute_keystroke(self, self->yanked, false);
+            }
+            break;
+        case 'y': yank_selection(self); break;
+        case 'd': cut_selection(self); break;
+        default: break;
+        }
     }
 }
 
 void buffer_cmd(Buffer *self, key_t cmd, bool is_simulated) {
-    switch (self->mode) {
-    case INSERT: buffer_insert_cmd(self, cmd, is_simulated); break;
-    case NORMAL: buffer_normal_cmd(self, cmd, is_simulated); break;
-    case SELECT: buffer_select_cmd(self, cmd); break;
-    default: report_logic_error(FILENAME ": weird mode");
+    if (self->mode == INSERT) {
+        buffer_insert_cmd(self, cmd, is_simulated);
+    } else {
+        buffer_normal_cmd(self, cmd, is_simulated);
     }
 }
 
