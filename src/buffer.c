@@ -507,7 +507,6 @@ void buffer_display(Buffer *self, uint16_t top_offset, uint16_t left_offset,
             /* TODO - what about non-printable characters? */
             contents_char = '?';
         }
-
         if (self->left_offset <= col && col <= self->left_offset + col_ct
             && self->top_offset <= row) {
             if (is_selected(self, row, col)) {
@@ -617,6 +616,9 @@ void buffer_destroy(Buffer *self) {
 
         stack_destroy(self->redo_stack);
         stack_destroy(self->undo_stack);
+
+        keystroke_destroy(self->current_redo_keystroke);
+        keystroke_destroy(self->current_undo_keystroke);
 
         free(self);
     }
