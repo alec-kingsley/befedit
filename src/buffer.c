@@ -290,10 +290,22 @@ static void buffer_insert_cmd(Buffer *self, key_t cmd) {
         contents_len++;
     }
     if (cmd == BACKSPACE) {
-        /* TODO - handle current undo keystroke */
+        if (self->is_recording) {
+            /* TODO - fix near borders */
+            prepend_undo_direction(self, reverse_direction(self->momentum));
+            self->momentum = reverse_direction(self->momentum);
+            prepend_undo_direction(self, self->momentum);
+            keystroke_prepend_key(
+                self->current_undo_keystroke,
+                string_builder_get_char(self->contents, contents_idx));
+            prepend_undo_direction(self, reverse_direction(self->momentum));
+            self->momentum = reverse_direction(self->momentum);
+            prepend_undo_direction(self, self->momentum);
+        }
         string_builder_set_char(self->contents, contents_idx, ' ');
     } else {
         if (self->is_recording) {
+            /* TODO - fix near borders */
             keystroke_prepend_key(
                 self->current_undo_keystroke,
                 string_builder_get_char(self->contents, contents_idx));
