@@ -61,11 +61,33 @@ struct Buffer {
     uint16_t current_action_col;
     uint16_t current_action_momentum;
 
+    /* position of start of insert mode, used for <enter> */
+    uint16_t insert_start_row;
+    uint16_t insert_start_col;
+
     mode_t mode;
 
     size_t selection_start_row;
     size_t selection_start_col;
+
+    Keystroke *yanked;
 };
+
+/**
+ * Get contents index of first character of a row.
+ */
+static size_t get_row_contents_idx(Buffer *self, size_t row) {
+    size_t contents_idx;
+    size_t current_row = 0;
+    const size_t contents_len = string_builder_len(self->contents);
+    for (contents_idx = 0; contents_idx < contents_len && current_row != row;
+         contents_idx++) {
+        if (string_builder_get_char(self->contents, contents_idx) == '\n') {
+            current_row++;
+        }
+    }
+    return contents_idx;
+}
 
 static void begin_recording_action(Buffer *self) {
     self->current_redo_keystroke = keystroke_create();
@@ -123,14 +145,6 @@ static void follow_reverse_momentum(Buffer *self) {
     follow_direction(self, reverse_direction(self->momentum));
 }
 
-static void execute_direction(Buffer *self, direction_t direction) {
-    if (direction != self->momentum) {
-        self->momentum = direction;
-    } else {
-        follow_momentum(self);
-    }
-}
-
 static void prepend_undo_direction(Buffer *self, direction_t direction) {
     direction_t from_direction = reverse_direction(direction);
     direction_t to_direction = reverse_direction(self->momentum);
@@ -168,6 +182,49 @@ static void prepend_undo_direction(Buffer *self, direction_t direction) {
     }
 }
 
+static void execute_direction(Buffer *self, direction_t direction,
+                              bool is_simulated) {
+    if (!is_simulated) {
+        prepend_undo_direction(self, direction);
+    }
+    if (direction != self->momentum) {
+        self->momentum = direction;
+    } else {
+        follow_momentum(self);
+    }
+}
+
+static void buffer_insert_enter(Buffer *self, bool is_simulated) {
+    direction_t forwards = self->momentum;
+    direction_t backwards = reverse_direction(self->momentum);
+    direction_t next_line = rotate_90_degrees(self->momentum);
+    bool keep_following = true;
+    execute_direction(self, next_line, is_simulated);
+    execute_direction(self, next_line, is_simulated);
+    execute_direction(self, backwards, is_simulated);
+    while (keep_following) {
+        switch (forwards) {
+        case UP:
+            keep_following = (self->cursor_row < self->insert_start_row);
+            break;
+        case DOWN:
+            keep_following = (self->cursor_row > self->insert_start_row);
+            break;
+        case LEFT:
+            keep_following = (self->cursor_col < self->insert_start_col);
+            break;
+        case RIGHT:
+            keep_following = (self->cursor_col > self->insert_start_col);
+            break;
+        default: report_logic_error(FILENAME ": unknown direction"); exit(1);
+        }
+        if (keep_following) {
+            execute_direction(self, backwards, is_simulated);
+        }
+    }
+    execute_direction(self, forwards, is_simulated);
+}
+
 static void buffer_insert_cmd(Buffer *self, key_t cmd, bool is_simulated) {
     uint16_t row = 0, col = 0;
     size_t contents_idx = 0;
@@ -178,6 +235,9 @@ static void buffer_insert_cmd(Buffer *self, key_t cmd, bool is_simulated) {
     }
     if (cmd == BACKSPACE) {
         follow_reverse_momentum(self);
+    } else if (cmd == '\n') {
+        buffer_insert_enter(self, is_simulated);
+        return;
     } else if (!key_is_printable(cmd)) {
         if (cmd == ESC_KEY) {
             if (!is_simulated) {
@@ -191,13 +251,9 @@ static void buffer_insert_cmd(Buffer *self, key_t cmd, bool is_simulated) {
         } else {
             direction = read_direction(cmd);
             if (direction.is_some) {
-                if (!is_simulated) {
-                    prepend_undo_direction(self, direction.unwrap);
-                }
-                execute_direction(self, direction.unwrap);
+                execute_direction(self, direction.unwrap, is_simulated);
             }
         }
-        /* TODO - allow arrow keys to work */
         return;
     }
     self->is_modified = true;
@@ -274,6 +330,7 @@ static void undo(Buffer *self) {
         simulate_action(self, undo_action);
         self->cursor_col = action_get_col(redo_action);
         self->cursor_row = action_get_row(redo_action);
+        self->momentum = action_get_momentum(redo_action);
         self->stack_idx++;
     }
 }
@@ -379,7 +436,7 @@ static void buffer_normal_cmd(Buffer *self, key_t cmd, bool is_simulated) {
     option_direction_t direction = read_direction(cmd);
 
     if (direction.is_some) {
-        execute_direction(self, direction.unwrap);
+        execute_direction(self, direction.unwrap, true);
     } else {
         switch (cmd) {
         case 'v':
@@ -400,6 +457,8 @@ static void buffer_normal_cmd(Buffer *self, key_t cmd, bool is_simulated) {
                 } else if (cmd == 'I') {
                     jump_line_end(self, true);
                 }
+                self->insert_start_row = self->cursor_row;
+                self->insert_start_col = self->cursor_col;
                 keystroke_append_key(self->current_redo_keystroke, cmd);
                 keystroke_prepend_key(self->current_undo_keystroke, ESC_KEY);
             }
@@ -410,9 +469,95 @@ static void buffer_normal_cmd(Buffer *self, key_t cmd, bool is_simulated) {
         case '.': redo_last_action(self); break;
         case 'u': undo(self); break;
         case 'U': redo(self); break;
+        case 'p':
+            if (self->yanked) {
+                begin_recording_action(self);
+                execute_keystroke(self, self->yanked, false);
+            }
+            break;
         default: break;
         }
     }
+}
+
+typedef struct {
+    size_t top_row;
+    size_t left_col;
+    size_t bottom_row;
+    size_t right_col;
+} selection_t;
+
+static selection_t get_selection(Buffer *self) {
+    selection_t selection;
+    if (self->mode == SELECT) {
+        if (self->selection_start_row < self->cursor_row) {
+            selection.top_row = self->selection_start_row;
+            selection.bottom_row = self->cursor_row;
+        } else {
+            selection.top_row = self->cursor_row;
+            selection.bottom_row = self->selection_start_row;
+        }
+        if (self->selection_start_col < self->cursor_col) {
+            selection.left_col = self->selection_start_col;
+            selection.right_col = self->cursor_col;
+        } else {
+            selection.left_col = self->cursor_col;
+            selection.right_col = self->selection_start_col;
+        }
+    } else {
+        selection.top_row = self->cursor_row;
+        selection.left_col = self->cursor_col;
+        selection.bottom_row = self->cursor_row;
+        selection.right_col = self->cursor_col;
+    }
+    return selection;
+}
+
+static void yank_selection(Buffer *self) {
+    selection_t selection = get_selection(self);
+    size_t contents_idx = get_row_contents_idx(self, selection.top_row);
+    const size_t contents_len = string_builder_len(self->contents);
+    size_t selection_row = 0;
+    size_t contents_col = 0;
+    char contents_char;
+    size_t i;
+    size_t row_chars_written;
+
+    keystroke_destroy(self->yanked);
+    self->yanked = keystroke_create();
+    keystroke_append_key(self->yanked, 'i');
+
+    while (selection_row < selection.bottom_row - selection.top_row + 1) {
+        if (contents_idx >= contents_len) {
+            contents_char = '\n';
+        } else {
+            contents_char
+                = string_builder_get_char(self->contents, contents_idx);
+            contents_idx++;
+        }
+        if (contents_char == '\n') {
+            row_chars_written = contents_col > selection.left_col
+                                    ? contents_col - selection.left_col
+                                    : 0;
+            if (contents_col < selection.right_col) {
+                for (i = 0; i < selection.right_col - selection.left_col + 1
+                                    - row_chars_written;
+                     i++) {
+                    keystroke_append_key(self->yanked, ' ');
+                }
+            }
+            keystroke_append_key(self->yanked, '\n');
+            contents_col = 0;
+            selection_row++;
+            continue;
+        }
+        if (selection.left_col <= contents_col
+            && contents_col <= selection.right_col) {
+            keystroke_append_key(self->yanked, contents_char);
+        }
+        contents_col++;
+    }
+    keystroke_append_key(self->yanked, ESC_KEY);
 }
 
 static void buffer_select_cmd(Buffer *self, key_t cmd) {
@@ -422,6 +567,8 @@ static void buffer_select_cmd(Buffer *self, key_t cmd) {
         follow_momentum(self);
     } else if (cmd == ESC_KEY) {
         self->mode = NORMAL;
+    } else if (cmd == 'y') {
+        yank_selection(self);
     }
 }
 
@@ -597,11 +744,16 @@ Buffer *buffer_create(const char *filename) {
     self->is_modified = false;
     self->mode = NORMAL;
 
+    self->current_redo_keystroke = NULL;
+    self->current_undo_keystroke = NULL;
+
     self->redo_stack = stack_create((void (*)(void *))action_destroy);
     if (!self->redo_stack) goto buffer_create_fail;
     self->undo_stack = stack_create((void (*)(void *))action_destroy);
     if (!self->undo_stack) goto buffer_create_fail;
     self->stack_idx = 0;
+
+    self->yanked = NULL;
 
     return self;
 buffer_create_fail:
@@ -619,6 +771,8 @@ void buffer_destroy(Buffer *self) {
 
         keystroke_destroy(self->current_redo_keystroke);
         keystroke_destroy(self->current_undo_keystroke);
+
+        keystroke_destroy(self->yanked);
 
         free(self);
     }

@@ -1,6 +1,6 @@
 # BefEdit
 
-A modal text editor for 2D languages, such as Befunge or ASCII art.
+A modal text editor for 2D languages, such as Befunge, ><>, or even ASCII art.
 
 ![demo](./assets/demo.gif)
 
@@ -27,7 +27,6 @@ momentum, it changes the momentum to that direction. If it does agree, the curso
 In insert mode, as you type, your cursor will move according to the
 momentum. `esc` brings you back to normal mode.
 
-
 ## Normal Mode actions
 
  - `i` - enter insert mode at current character
@@ -40,6 +39,7 @@ momentum. `esc` brings you back to normal mode.
  - `^` - jump to start of line
  - `$` - jump to end of line
  - `v` - enter select mode
+ - `p` - paste yanked selection (rotates according to momentum)
 
 Example of `.`:
 
@@ -61,6 +61,7 @@ line. The orientation of the line is defined based on this.
 ## Select mode interactions
 
  - hjkl and arrow keys - move around (no momentum involved)
+ - `y` - yank a selection
  - `<esc>` - exit select mode
 
 ### Why does it think the buffer is modified after undoing everything?
