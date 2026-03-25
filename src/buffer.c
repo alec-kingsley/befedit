@@ -692,7 +692,7 @@ void buffer_build_display(Buffer *self, StringBuilder *display,
             contents_char = '\n';
         }
         if (contents_char == '\n') {
-            if (col == col_ct + self->left_offset) {
+            if (col >= col_ct + self->left_offset) {
                 row++;
                 col = 0;
                 move_cursor(display, row + top_offset - self->top_offset + 1,
