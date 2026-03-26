@@ -90,17 +90,38 @@ static void update_screen(Editor *self, mode_t mode) {
     string_builder_destroy(display);
 }
 
-typedef enum { WRITE, WRITE_QUIT, QUIT, FORCE_QUIT, NEXT, UNKNOWN } command_t;
+typedef enum {
+    WRITE,
+    WRITE_QUIT,
+    QUIT,
+    FORCE_QUIT,
+    WRITE_ALL,
+    WRITE_QUIT_ALL,
+    QUIT_ALL,
+    FORCE_QUIT_ALL,
+    NEXT,
+    UNKNOWN
+} command_t;
 
 static command_t read_command(const char *cmd) {
     if (strcmp(cmd, "w") == 0 || strcmp(cmd, "write") == 0) {
         return WRITE;
-    } else if (strcmp(cmd, "wq") == 0 || strcmp(cmd, "x") == 0 || strcmp(cmd, "write-quit") == 0) {
+    } else if (strcmp(cmd, "wq") == 0 || strcmp(cmd, "x") == 0
+               || strcmp(cmd, "write-quit") == 0) {
         return WRITE_QUIT;
-    } else if (strcmp(cmd, "q") == 0 || strcmp(cmd, "quit")) {
+    } else if (strcmp(cmd, "q") == 0 || strcmp(cmd, "quit") == 0) {
         return QUIT;
     } else if (strcmp(cmd, "q!") == 0 || strcmp(cmd, "quit!") == 0) {
         return FORCE_QUIT;
+    } else if (strcmp(cmd, "wa") == 0 || strcmp(cmd, "write-all") == 0) {
+        return WRITE_ALL;
+    } else if (strcmp(cmd, "wqa") == 0 || strcmp(cmd, "xa") == 0
+               || strcmp(cmd, "write-quit-all") == 0) {
+        return WRITE_QUIT_ALL;
+    } else if (strcmp(cmd, "qa") == 0 || strcmp(cmd, "quit-all") == 0) {
+        return QUIT_ALL;
+    } else if (strcmp(cmd, "qa!") == 0 || strcmp(cmd, "quit-all!") == 0) {
+        return FORCE_QUIT_ALL;
     } else if (strcmp(cmd, "n") == 0 || strcmp(cmd, "next") == 0) {
         return NEXT;
     }
@@ -110,6 +131,8 @@ static command_t read_command(const char *cmd) {
 static void run_command(Editor *self, const char *cmd) {
     Buffer *buffer = self->buffer;
     bool should_delete = false;
+    bool should_delete_all = false;
+    size_t i;
     switch (read_command(cmd)) {
     case WRITE:
         if (buffer_save(buffer)) {
@@ -142,6 +165,35 @@ static void run_command(Editor *self, const char *cmd) {
                                "cannot close modified buffer");
         }
         break;
+    case WRITE_ALL:
+        for (i = 0; i < list_len(self->buffers); i++) {
+            if (buffer_is_modified(list_get(self->buffers, i))) {
+                buffer_save(list_get(self->buffers, i));
+            }
+        }
+        break;
+    case WRITE_QUIT_ALL:
+        should_delete_all = true;
+        for (i = 0; i < list_len(self->buffers); i++) {
+            if (buffer_is_modified(list_get(self->buffers, i))) {
+                buffer_save(list_get(self->buffers, i));
+            }
+        }
+        break;
+    case QUIT_ALL:
+        should_delete_all = true;
+        for (i = 0; i < list_len(self->buffers) && should_delete_all; i++) {
+            if (buffer_is_modified(list_get(self->buffers, i))) {
+                should_delete_all = false;
+            }
+        }
+        if (!should_delete_all) {
+            self->status_message_is_error = true;
+            string_builder_set(self->status_message,
+                               "cannot close modified buffer");
+        }
+        break;
+    case FORCE_QUIT_ALL: should_delete_all = true; break;
     case NEXT:
         self->buffer_idx++;
         self->buffer_idx %= list_len(self->buffers);
@@ -161,6 +213,11 @@ static void run_command(Editor *self, const char *cmd) {
         if (!list_is_empty(self->buffers)) {
             self->buffer = list_get(self->buffers, self->buffer_idx);
         }
+    } else if (should_delete_all) {
+        while (!list_is_empty(self->buffers)) {
+            buffer_destroy(list_remove(self->buffers, 0));
+        }
+        self->buffer_idx = 0;
     }
 }
 
