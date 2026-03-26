@@ -83,16 +83,35 @@ static void update_screen(Editor *self, mode_t mode) {
                          self->status_message_is_error);
     string_builder_append(display, RESET);
 
-    buffer_build_display(self->buffer, display, top_offset, left_offset, row_ct - 2, col_ct);
+    buffer_build_display(self->buffer, display, top_offset, left_offset,
+                         row_ct - 2, col_ct);
 
     string_builder_print(display);
     string_builder_destroy(display);
 }
 
+typedef enum { WRITE, WRITE_QUIT, QUIT, FORCE_QUIT, NEXT, UNKNOWN } command_t;
+
+static command_t read_command(const char *cmd) {
+    if (strcmp(cmd, "w") == 0 || strcmp(cmd, "write") == 0) {
+        return WRITE;
+    } else if (strcmp(cmd, "wq") == 0 || strcmp(cmd, "x") == 0 || strcmp(cmd, "write-quit") == 0) {
+        return WRITE_QUIT;
+    } else if (strcmp(cmd, "q") == 0 || strcmp(cmd, "quit")) {
+        return QUIT;
+    } else if (strcmp(cmd, "q!") == 0 || strcmp(cmd, "quit!") == 0) {
+        return FORCE_QUIT;
+    } else if (strcmp(cmd, "n") == 0 || strcmp(cmd, "next") == 0) {
+        return NEXT;
+    }
+    return UNKNOWN;
+}
+
 static void run_command(Editor *self, const char *cmd) {
     Buffer *buffer = self->buffer;
     bool should_delete = false;
-    if (strcmp(cmd, "w") == 0) {
+    switch (read_command(cmd)) {
+    case WRITE:
         if (buffer_save(buffer)) {
             string_builder_set(self->status_message, buffer_name(self->buffer));
             string_builder_append(self->status_message, " written");
@@ -101,7 +120,8 @@ static void run_command(Editor *self, const char *cmd) {
             string_builder_set(self->status_message,
                                "failed to write to buffer");
         }
-    } else if (strcmp(cmd, "x") == 0 || strcmp(cmd, "wq") == 0) {
+        break;
+    case WRITE_QUIT:
         should_delete = true;
         if (buffer_save(buffer)) {
             string_builder_set(self->status_message, buffer_name(self->buffer));
@@ -111,9 +131,9 @@ static void run_command(Editor *self, const char *cmd) {
             string_builder_set(self->status_message,
                                "failed to write to buffer");
         }
-    } else if (strcmp(cmd, "q!") == 0) {
-        should_delete = true;
-    } else if (strcmp(cmd, "q") == 0) {
+        break;
+    case FORCE_QUIT: should_delete = true; break;
+    case QUIT:
         if (!buffer_is_modified(buffer)) {
             should_delete = true;
         } else {
@@ -121,11 +141,13 @@ static void run_command(Editor *self, const char *cmd) {
             string_builder_set(self->status_message,
                                "cannot close modified buffer");
         }
-    } else if (strcmp(cmd, "n") == 0) {
+        break;
+    case NEXT:
         self->buffer_idx++;
         self->buffer_idx %= list_len(self->buffers);
         self->buffer = list_get(self->buffers, self->buffer_idx);
-    } else {
+        break;
+    case UNKNOWN:
         self->status_message_is_error = true;
         string_builder_set(self->status_message, "unrecognized command: ");
         string_builder_append(self->status_message, cmd);
