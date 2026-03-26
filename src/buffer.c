@@ -46,6 +46,8 @@ struct Buffer {
     size_t cursor_col;
     /* # of rows on the top of the screen hidden */
     uint16_t top_offset;
+    size_t top_row_contents_idx;
+    size_t rows_past_end;
     /* # of columns on the left of the screen hidden */
     uint16_t left_offset;
     bool is_modified;
@@ -229,8 +231,8 @@ static void buffer_insert_enter(Buffer *self) {
 }
 
 static void buffer_insert_cmd(Buffer *self, key_t cmd) {
-    uint16_t row = 0, col = 0;
-    size_t contents_idx = 0;
+    uint16_t row = self->top_offset, col = 0;
+    size_t contents_idx = self->top_row_contents_idx;
     size_t contents_len = string_builder_len(self->contents);
     option_direction_t direction;
     if (self->is_recording) {
@@ -570,9 +572,7 @@ static void buffer_normal_cmd(Buffer *self, key_t cmd, bool is_simulated) {
         }
     } else {
         switch (cmd) {
-        case ESC_KEY:
-            self->mode = NORMAL;
-            break;
+        case ESC_KEY: self->mode = NORMAL; break;
         case 'v':
             if (self->mode == NORMAL) {
                 self->selection_start_col = self->cursor_col;
@@ -641,6 +641,60 @@ void buffer_cmd(Buffer *self, key_t cmd, bool is_simulated) {
 }
 
 /**
+ * Update the `top_row_contents_idx`, `rows_past_end`, and `top_offset` fields
+ * These are all necessary to improve speed in large files.
+ */
+static void update_top_offset(Buffer *self, size_t new_top_offset) {
+    const size_t contents_len = string_builder_len(self->contents);
+    char contents_char;
+
+    if (new_top_offset == 0) {
+        self->top_offset = 0;
+        self->top_row_contents_idx = 0;
+        self->rows_past_end = 0;
+    } else if (new_top_offset > self->top_offset) {
+        while (new_top_offset > self->top_offset) {
+            if (self->top_row_contents_idx == contents_len) {
+                self->rows_past_end += new_top_offset - self->top_offset;
+                self->top_offset = new_top_offset;
+            } else {
+                contents_char = ' ';
+                do {
+                    contents_char = string_builder_get_char(
+                        self->contents, self->top_row_contents_idx);
+                    self->top_row_contents_idx++;
+                    if (contents_char == '\n') {
+                        self->top_offset++;
+                        break;
+                    }
+                } while (self->top_row_contents_idx != contents_len);
+            }
+        }
+    } else {
+        while (new_top_offset < self->top_offset) {
+            if (self->rows_past_end > 0) {
+                self->rows_past_end--;
+                self->top_offset--;
+            } else {
+                do {
+                    self->top_row_contents_idx--;
+                    contents_char = string_builder_get_char(
+                        self->contents, self->top_row_contents_idx);
+                } while (contents_char != '\n');
+                self->top_offset--;
+            }
+        }
+        /* goto beginning of line */
+        do {
+            self->top_row_contents_idx--;
+            contents_char = string_builder_get_char(self->contents,
+                                                    self->top_row_contents_idx);
+        } while (contents_char != '\n');
+        self->top_row_contents_idx++;
+    }
+}
+
+/**
  * Move frame as necessary to fit cursor.
  */
 static void fit_frame_to_cursor(Buffer *self, uint16_t row_ct,
@@ -651,9 +705,9 @@ static void fit_frame_to_cursor(Buffer *self, uint16_t row_ct,
     const uint16_t max_col = min_col + col_ct - 1;
 
     if (self->cursor_row < min_row) {
-        self->top_offset = self->cursor_row;
+        update_top_offset(self, self->cursor_row);
     } else if (self->cursor_row > max_row) {
-        self->top_offset = self->cursor_row - row_ct + 1;
+        update_top_offset(self, self->cursor_row - row_ct + 1);
     }
 
     if (self->cursor_col < min_col) {
@@ -681,11 +735,15 @@ static bool is_selected(Buffer *self, size_t row, size_t col) {
 void buffer_build_display(Buffer *self, StringBuilder *display,
                           uint16_t top_offset, uint16_t left_offset,
                           uint16_t row_ct, uint16_t col_ct) {
-    uint16_t row = 0, col = 0;
-    size_t contents_idx = 0;
+    uint16_t row, col = 0;
+    size_t contents_idx;
     const size_t contents_len = string_builder_len(self->contents);
     char contents_char;
+
     fit_frame_to_cursor(self, row_ct, col_ct);
+    row = self->top_offset;
+    contents_idx = self->top_row_contents_idx;
+
     move_cursor(display, top_offset + 1, left_offset + 1);
     while (row < row_ct + self->top_offset) {
         if (contents_idx < contents_len) {
@@ -713,8 +771,7 @@ void buffer_build_display(Buffer *self, StringBuilder *display,
             /* TODO - what about non-printable characters? */
             contents_char = '?';
         }
-        if (self->left_offset <= col && col < self->left_offset + col_ct
-            && self->top_offset <= row) {
+        if (self->left_offset <= col && col < self->left_offset + col_ct) {
             if (is_selected(self, row, col)) {
                 string_builder_append(display, HIGHLIGHT);
                 string_builder_append_char(display, contents_char);
@@ -725,6 +782,7 @@ void buffer_build_display(Buffer *self, StringBuilder *display,
         }
         col++;
     }
+
     move_cursor(display, top_offset + 1 + self->cursor_row - self->top_offset,
                 left_offset + 1 + self->cursor_col - self->left_offset);
 }
@@ -795,6 +853,8 @@ Buffer *buffer_create(const char *filename) {
     self->cursor_row = 0;
     self->cursor_col = 0;
     self->top_offset = 0;
+    self->top_row_contents_idx = 0;
+    self->rows_past_end = 0;
     self->left_offset = 0;
     self->momentum = RIGHT;
     self->is_modified = false;
