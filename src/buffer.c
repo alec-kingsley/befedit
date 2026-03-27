@@ -787,9 +787,18 @@ void buffer_build_display(Buffer *self, StringBuilder *display,
                 left_offset + 1 + self->cursor_col - self->left_offset);
 }
 
-/**
- * Get name of buffer.
- */
+size_t buffer_get_row(Buffer *self) {
+    return self->cursor_row + 1;
+}
+
+size_t buffer_get_col(Buffer *self) {
+    return self->cursor_col + 1;
+}
+
+direction_t buffer_get_momentum(Buffer *self) {
+    return self->momentum;
+}
+
 char *buffer_name(Buffer *self) {
     return self->filename;
 }

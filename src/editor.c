@@ -1,6 +1,7 @@
 #include "editor.h"
 #include "buffer.h"
 #include "colors.h"
+#include "direction.h"
 #include "list.h"
 #include "reporter.h"
 #include "string_builder.h"
@@ -27,11 +28,18 @@ static void reset_status_message(Editor *self) {
     self->status_message_is_error = false;
 }
 
-static void build_footer(StringBuilder *display, mode_t mode) {
+static void build_footer(StringBuilder *display, mode_t mode,
+                         direction_t momentum, size_t cursor_row,
+                         size_t cursor_col) {
     uint16_t col;
-    const char *mode_str = mode == NORMAL   ? "NOR"
-                           : mode == INSERT ? "INS"
-                                            : "SEL";
+    const char *mode_str = mode == NORMAL   ? "NORMAL"
+                           : mode == INSERT ? "INSERT"
+                                            : "SELECT";
+    const char *arrow = momentum == LEFT    ? "←"
+                        : momentum == UP    ? "↑"
+                        : momentum == RIGHT ? "→"
+                                            : "↓";
+    char position[32];
 
     /* fill empty footer */
     move_cursor(display, get_row_ct() - 1, 0);
@@ -43,6 +51,17 @@ static void build_footer(StringBuilder *display, mode_t mode) {
     /* write mode */
     move_cursor(display, get_row_ct() - 1, 0);
     string_builder_append(display, mode_str);
+
+    sprintf(position, "%lu:%lu", cursor_row, cursor_col);
+
+    /* write position */
+    move_cursor(display, get_row_ct() - 1, get_col_ct() - strlen(position) - 2);
+    string_builder_append(display, position);
+
+    /* write momentum */
+    move_cursor(display, get_row_ct() - 1, get_col_ct() - 1);
+    string_builder_append(display, arrow);
+
     string_builder_append(display, RESET);
 }
 
@@ -77,7 +96,8 @@ static void update_screen(Editor *self, mode_t mode) {
 
     string_builder_append(display, CLEAR_SCREEN RESET_CURSOR SHOW_CURSOR);
 
-    build_footer(display, mode);
+    build_footer(display, mode, buffer_get_momentum(self->buffer),
+                 buffer_get_row(self->buffer), buffer_get_col(self->buffer));
     build_status_message(display,
                          string_builder_to_string(self->status_message),
                          self->status_message_is_error);

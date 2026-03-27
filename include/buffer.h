@@ -1,8 +1,11 @@
 #pragma once
+#include "direction.h"
 #ifndef BUFFER_H
 #define BUFFER_H
 
-#include "terminal.h"
+#include "key.h"
+#include "string_builder.h"
+#include <stdbool.h>
 #include <stdint.h>
 
 typedef enum { NORMAL, INSERT, SELECT, COMMAND } mode_t;
@@ -26,6 +29,21 @@ void buffer_cmd(Buffer *self, key_t cmd, bool is_simulated);
 void buffer_build_display(Buffer *self, StringBuilder *display,
                           uint16_t top_offset, uint16_t left_offset,
                           uint16_t row_ct, uint16_t col_ct);
+
+/**
+ * Get current 1-indexed row.
+ */
+size_t buffer_get_row(Buffer *self);
+
+/**
+ * Get current 1-indexed column.
+ */
+size_t buffer_get_col(Buffer *self);
+
+/**
+ * Get current buffer momentum.
+ */
+direction_t buffer_get_momentum(Buffer *self);
 
 /**
  * Get name of buffer.

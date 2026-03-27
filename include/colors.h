@@ -18,6 +18,8 @@
 #define HIDE_CURSOR "\x1b[?25l"
 #define SHOW_CURSOR "\x1b[?25h"
 
+#define BOLD "\x1b[0m"
+
 #define RESET "\x1b[0m"
 
 #endif
