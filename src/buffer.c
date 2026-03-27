@@ -148,8 +148,56 @@ static void follow_momentum(Buffer *self) {
     follow_direction(self, self->momentum);
 }
 
-static void follow_reverse_momentum(Buffer *self) {
-    follow_direction(self, reverse_direction(self->momentum));
+static void add_row_top(Buffer *self) {
+    string_builder_insert(self->contents, 0, "\n");
+}
+
+static void add_column_left(Buffer *self) {
+    size_t contents_idx = 0;
+    size_t contents_len = string_builder_len(self->contents) + 1;
+    char contents_char;
+    self->top_row_contents_idx += self->top_offset;
+    string_builder_insert(self->contents, 0, " ");
+    while (contents_idx < contents_len) {
+        contents_char = string_builder_get_char(self->contents, contents_idx);
+        if (contents_char == '\n') {
+            string_builder_insert(self->contents, contents_idx + 1, " ");
+            contents_idx++;
+            contents_len++;
+        }
+        contents_idx++;
+    }
+}
+
+static void force_follow_direction(Buffer *self, direction_t direction) {
+    switch (direction) {
+    case LEFT:
+        if (self->cursor_col > 0) {
+            self->cursor_col--;
+        } else {
+            self->current_action_col++;
+            add_column_left(self);
+        }
+        break;
+    case DOWN: self->cursor_row++; break;
+    case UP:
+        if (self->cursor_row > 0) {
+            self->cursor_row--;
+        } else {
+            self->current_action_row++;
+            add_row_top(self);
+        }
+        break;
+    case RIGHT: self->cursor_col++; break;
+    }
+}
+
+static void force_follow_momentum(Buffer *self) {
+    force_follow_direction(self, self->momentum);
+}
+
+static void force_follow_reverse_momentum(Buffer *self) {
+    force_follow_direction(self, reverse_direction(self->momentum));
 }
 
 static void prepend_undo_direction(Buffer *self, direction_t direction) {
@@ -196,7 +244,7 @@ static void execute_direction(Buffer *self, direction_t direction) {
     if (direction != self->momentum) {
         self->momentum = direction;
     } else {
-        follow_momentum(self);
+        force_follow_momentum(self);
     }
 }
 
@@ -240,7 +288,7 @@ static void buffer_insert_cmd(Buffer *self, key_t cmd) {
         keystroke_append_key(self->current_redo_keystroke, cmd);
     }
     if (cmd == BACKSPACE) {
-        follow_reverse_momentum(self);
+        force_follow_reverse_momentum(self);
     } else if (cmd == '\n') {
         buffer_insert_enter(self);
         return;
@@ -297,7 +345,6 @@ static void buffer_insert_cmd(Buffer *self, key_t cmd) {
     }
     if (cmd == BACKSPACE) {
         if (self->is_recording) {
-            /* TODO - fix near borders */
             prepend_undo_direction(self, reverse_direction(self->momentum));
             self->momentum = reverse_direction(self->momentum);
             prepend_undo_direction(self, self->momentum);
@@ -311,14 +358,13 @@ static void buffer_insert_cmd(Buffer *self, key_t cmd) {
         string_builder_set_char(self->contents, contents_idx, ' ');
     } else {
         if (self->is_recording) {
-            /* TODO - fix near borders */
             keystroke_prepend_key(
                 self->current_undo_keystroke,
                 string_builder_get_char(self->contents, contents_idx));
         }
         string_builder_set_char(self->contents, contents_idx, cmd);
         if (!self->is_replacing) {
-            follow_momentum(self);
+            force_follow_momentum(self);
         }
     }
     if (self->is_replacing) {
@@ -696,13 +742,15 @@ static void update_top_offset(Buffer *self, size_t new_top_offset) {
                 self->top_offset--;
             }
         }
-        /* goto beginning of line */
-        do {
-            self->top_row_contents_idx--;
-            contents_char = string_builder_get_char(self->contents,
-                                                    self->top_row_contents_idx);
-        } while (contents_char != '\n');
-        self->top_row_contents_idx++;
+        if (self->rows_past_end == 0) {
+            /* goto beginning of line */
+            do {
+                self->top_row_contents_idx--;
+                contents_char = string_builder_get_char(
+                    self->contents, self->top_row_contents_idx);
+            } while (contents_char != '\n');
+            self->top_row_contents_idx++;
+        }
     }
 }
 

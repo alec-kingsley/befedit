@@ -29,6 +29,10 @@ momentum, it changes the momentum to that direction. If it does agree, the curso
 In insert mode, as you type, your cursor will move according to the
 momentum. `esc` brings you back to normal mode.
 
+While in insert mode, if you hit the left or top of the screen, it will add whitespace to the file
+for your cursor to move to these positions. Hitting the left wall of a large file can cause lag
+due to this.
+
 ## Normal Mode actions
 
  - `i` - enter insert mode at current character
