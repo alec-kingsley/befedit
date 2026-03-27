@@ -44,6 +44,7 @@ momentum. `esc` brings you back to normal mode.
  - `p` - paste yanked selection (rotates according to momentum)
  - `d` - delete current character
  - `y` - yank current character
+ - `r` - replace a key
 
 Example of `.`:
 

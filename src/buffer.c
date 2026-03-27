@@ -69,6 +69,7 @@ struct Buffer {
     uint16_t insert_start_col;
 
     mode_t mode;
+    bool is_replacing; /* for insert mode but just one char */
 
     size_t selection_start_row;
     size_t selection_start_col;
@@ -247,11 +248,14 @@ static void buffer_insert_cmd(Buffer *self, key_t cmd) {
         if (cmd == ESC_KEY) {
             if (self->is_recording) {
                 keystroke_prepend_key(self->current_undo_keystroke, 'i');
-                keystroke_prepend_key(
-                    self->current_undo_keystroke,
-                    direction_as_key(reverse_direction(self->momentum)));
+                if (!self->is_replacing) {
+                    keystroke_prepend_key(
+                        self->current_undo_keystroke,
+                        direction_as_key(reverse_direction(self->momentum)));
+                }
                 push_current_action(self);
             }
+            self->is_replacing = false;
             self->mode = NORMAL;
         } else {
             direction = read_direction(cmd);
@@ -313,7 +317,12 @@ static void buffer_insert_cmd(Buffer *self, key_t cmd) {
                 string_builder_get_char(self->contents, contents_idx));
         }
         string_builder_set_char(self->contents, contents_idx, cmd);
-        follow_momentum(self);
+        if (!self->is_replacing) {
+            follow_momentum(self);
+        }
+    }
+    if (self->is_replacing) {
+        buffer_insert_cmd(self, ESC_KEY);
     }
 }
 
@@ -580,6 +589,7 @@ static void buffer_normal_cmd(Buffer *self, key_t cmd, bool is_simulated) {
                 self->mode = SELECT;
             }
             break;
+        case 'r':
         case 'i':
         case 'a':
         case 'A':
@@ -593,6 +603,8 @@ static void buffer_normal_cmd(Buffer *self, key_t cmd, bool is_simulated) {
                 jump_line_end(self, false);
             } else if (cmd == 'I') {
                 jump_line_end(self, true);
+            } else if (cmd == 'r') {
+                self->is_replacing = true;
             }
             self->insert_start_row = self->cursor_row;
             self->insert_start_col = self->cursor_col;
@@ -868,6 +880,7 @@ Buffer *buffer_create(const char *filename) {
     self->momentum = RIGHT;
     self->is_modified = false;
     self->mode = NORMAL;
+    self->is_replacing = false;
 
     self->is_recording = false;
     self->current_redo_keystroke = NULL;
