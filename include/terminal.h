@@ -2,31 +2,9 @@
 #ifndef TERMINAL_H
 #define TERMINAL_H
 
+#include "key.h"
 #include "string_builder.h"
 #include <stdint.h>
-
-#define CTRL(k) ((k) & 0x1f)
-enum special_key {
-    /* guarantee each special key needs 2bytes */
-    ARROW_LEFT = 0x100,
-    ARROW_RIGHT,
-    ARROW_UP,
-    ARROW_DOWN,
-    DEL_KEY,
-    HOME_KEY,
-    END_KEY,
-    PAGE_UP,
-    PAGE_DOWN
-};
-#define ESC_KEY 27
-#define BACKSPACE 0x7f
-
-typedef uint16_t key_t;
-
-/**
- * Print key.
- */
-void print_key(key_t key);
 
 /**
  * Read terminal window size.
@@ -48,11 +26,6 @@ uint16_t get_col_ct(void);
  * Get a key press.
  */
 key_t get_key(void);
-
-/**
- * Return `true` iff `key` is printable.
- */
-bool key_is_printable(key_t key);
 
 /**
  * Append cursor move to `(row, col)` command to `display`
