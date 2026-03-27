@@ -17,7 +17,7 @@ all: $(TARGET)
 
 # build target
 $(TARGET): $(OBJS) $(BUILD_DIR)/befedit.o | $(BIN_DIR)
-	gcc $^ -o $@ -lm
+	gcc $^ -o $@
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(BUILD_DIR)
 	gcc $(CFLAGS) -c $< -o $@
 $(BUILD_DIR)/befedit.o: $(SRC_MAIN) | $(BUILD_DIR)
