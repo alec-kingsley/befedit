@@ -94,6 +94,8 @@ if it's been unmodified since opening.
 | quit!              | q!        | close buffer w/o saving       |
 | quit-all           | qa        | close all buffers             |
 | quit-all!          | qa!       | close all buffers w/o saving  |
+| write              | w         | save buffer                   |
+| write-all          | wa        | save all buffers              |
 | write-quit         | wq        | save and close buffer         |
 | write-quit         | x         | save and close buffer         |
 | write-quit-all     | wqa       | save and close all buffers    |
