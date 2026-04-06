@@ -744,9 +744,10 @@ static void buffer_normal_cmd(Buffer *self, key_t cmd, bool is_simulated) {
                 begin_recording_action(self);
             }
             if (cmd == 'a') {
-                follow_momentum(self);
+                force_follow_momentum(self);
             } else if (cmd == 'A') {
                 jump_line_end(self, false);
+                force_follow_momentum(self);
             } else if (cmd == 'I') {
                 jump_line_end(self, true);
             } else if (cmd == 'r') {
