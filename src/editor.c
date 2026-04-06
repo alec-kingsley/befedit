@@ -120,6 +120,7 @@ typedef enum {
     QUIT_ALL,
     FORCE_QUIT_ALL,
     NEXT,
+    CLEAN_WHITESPACE,
     UNKNOWN
 } command_t;
 
@@ -144,6 +145,8 @@ static command_t read_command(const char *cmd) {
         return FORCE_QUIT_ALL;
     } else if (strcmp(cmd, "n") == 0 || strcmp(cmd, "next") == 0) {
         return NEXT;
+    } else if (strcmp(cmd, "cw") == 0 || strcmp(cmd, "clean-whitespace") == 0) {
+        return CLEAN_WHITESPACE;
     }
     return UNKNOWN;
 }
@@ -218,6 +221,9 @@ static void run_command(Editor *self, const char *cmd) {
         self->buffer_idx++;
         self->buffer_idx %= list_len(self->buffers);
         self->buffer = list_get(self->buffers, self->buffer_idx);
+        break;
+    case CLEAN_WHITESPACE:
+        buffer_clean_whitespace(self->buffer);
         break;
     case UNKNOWN:
         self->status_message_is_error = true;

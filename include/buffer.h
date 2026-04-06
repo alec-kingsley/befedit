@@ -21,6 +21,11 @@ typedef struct Buffer Buffer;
 void buffer_cmd(Buffer *self, key_t cmd, bool is_simulated);
 
 /**
+ * Remove extraneous whitespace at file edges.
+ */
+void buffer_clean_whitespace(Buffer *self);
+
+/**
  * Display buffer in a region on the screen.
  * Do not overwrite anything else on the screen.
  *

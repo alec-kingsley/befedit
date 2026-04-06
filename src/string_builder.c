@@ -118,15 +118,33 @@ void string_builder_restrict(StringBuilder *self, size_t start, int32_t end) {
     self->len = new_len;
 }
 
+void string_builder_remove_range(StringBuilder *self, size_t start,
+                                 size_t end) {
+    if (start == end) return;
+    if (end > self->len) {
+        report_logic_error(FILENAME
+                           ": attempt to remove past end of string builder");
+    }
+    if (end < start) {
+        report_logic_error(FILENAME ": attempt to remove backwards range");
+        exit(1);
+    }
+
+    memmove(self->val + start, self->val + end, self->len - end);
+    self->len -= end - start;
+}
+
 #define CHUNK_SIZE 1024
 
 void string_builder_print(StringBuilder *self) {
     size_t bytes_left = self->len;
-    size_t bytes_to_print;
+    int bytes_to_print;
     char *ptr = self->val;
     while (bytes_left > 0) {
         bytes_to_print = bytes_left < CHUNK_SIZE ? bytes_left : CHUNK_SIZE;
-        write(STDOUT_FILENO, ptr, bytes_to_print);
+        if (write(STDOUT_FILENO, ptr, bytes_to_print) != bytes_to_print) {
+            report_system_error(FILENAME ": failed to write bytes");
+        }
         ptr += bytes_to_print;
         bytes_left -= bytes_to_print;
     }

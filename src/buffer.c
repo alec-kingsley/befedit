@@ -698,6 +698,109 @@ void buffer_cmd(Buffer *self, key_t cmd, bool is_simulated) {
     }
 }
 
+static void buffer_clean_vertical_whitespace(Buffer *self) {
+    size_t i;
+    size_t contents_len = string_builder_len(self->contents);
+    bool found_first = false, found_last = false;
+    char c;
+    /* size_max if there is no last new line */
+    size_t last_new_line_idx = SIZE_MAX;
+    for (i = 0; i < contents_len && !found_first; i++) {
+        c = string_builder_get_char(self->contents, i);
+        if (c == '\n') {
+            last_new_line_idx = i;
+        } else if (c != ' ' && c != '\t') {
+            found_first = true;
+        }
+    }
+
+    /* remove lines at beginning */
+    if (found_first && last_new_line_idx != SIZE_MAX) {
+        string_builder_remove_range(self->contents, 0, last_new_line_idx + 1);
+        contents_len -= last_new_line_idx + 1;
+    }
+    i = contents_len;
+    do {
+        i--;
+        c = string_builder_get_char(self->contents, i);
+        if (c != '\n' && c != '\t' && c != ' ') {
+            found_last = true;
+        }
+    } while (i != 0 && !found_last);
+
+    /* remove lines at end */
+    if (found_last) {
+        string_builder_remove_range(self->contents, i, contents_len);
+    }
+
+    /* ensure new line at end */
+    string_builder_append_char(self->contents, '\n');
+}
+
+static void buffer_remove_left_columns(Buffer *self, size_t column_ct) {
+    size_t contents_idx = 0;
+    char contents_char;
+    size_t col = 0;
+    size_t line_start = 0;
+    while (contents_idx < string_builder_len(self->contents)) {
+        contents_char = string_builder_get_char(self->contents, contents_idx);
+        if (col == column_ct || (contents_char == '\n' && col <= column_ct)) {
+            string_builder_remove_range(self->contents, line_start,
+                                        contents_idx);
+            contents_idx = line_start;
+        }
+        if (contents_char == '\n') {
+            line_start = contents_idx + 1;
+            col = 0;
+        } else {
+            col++;
+        }
+        contents_idx++;
+    }
+}
+
+static void buffer_clean_horizontal_whitespace(Buffer *self) {
+    size_t left_to_remove = SIZE_MAX;
+    size_t contents_idx = 0;
+    char contents_char;
+    size_t col = 0;
+    size_t last_non_whitespace = 0;
+    bool found_first = false;
+    while (contents_idx < string_builder_len(self->contents)) {
+        contents_char = string_builder_get_char(self->contents, contents_idx);
+        if (contents_char == '\n') {
+            if (col > 0 && col != last_non_whitespace + 1) {
+                string_builder_remove_range(
+                    self->contents, last_non_whitespace + 1, contents_idx);
+                contents_idx = last_non_whitespace + 1;
+            }
+            col = 0;
+            found_first = false;
+            last_non_whitespace = contents_idx + 1;
+        } else {
+            if (contents_char != '\t' && contents_char != ' ') {
+                last_non_whitespace = contents_idx;
+                if (!found_first) {
+                    if (col < left_to_remove) {
+                        left_to_remove = col;
+                    }
+                    found_first = true;
+                }
+            }
+            col++;
+        }
+        contents_idx++;
+    }
+    if (left_to_remove != SIZE_MAX) {
+        buffer_remove_left_columns(self, left_to_remove);
+    }
+}
+
+void buffer_clean_whitespace(Buffer *self) {
+    buffer_clean_vertical_whitespace(self);
+    buffer_clean_horizontal_whitespace(self);
+}
+
 /**
  * Update the `top_row_contents_idx`, `rows_past_end`, and `top_offset` fields
  * These are all necessary to improve speed in large files.

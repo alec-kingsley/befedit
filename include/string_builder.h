@@ -66,6 +66,12 @@ bool string_builder_append(StringBuilder *self, const char *other);
 void string_builder_restrict(StringBuilder *self, size_t start, int32_t end);
 
 /**
+ * Remove a character range from `self`.
+ * Includes `start` not `end`.
+ */
+void string_builder_remove_range(StringBuilder *self, size_t start, size_t end);
+
+/**
  * Safely print `self`.
  */
 void string_builder_print(StringBuilder *self);

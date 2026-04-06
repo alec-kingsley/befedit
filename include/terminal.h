@@ -39,4 +39,9 @@ void move_cursor(StringBuilder *display, uint16_t row, uint16_t col);
  */
 void enable_raw_mode(void);
 
+/**
+ * Append an error to the terminal to output at exit.
+ */
+void append_terminal_error(const char *error);
+
 #endif

@@ -1,6 +1,7 @@
 #include "terminal.h"
 #include "colors.h"
 #include "reporter.h"
+#include "string_builder.h"
 #include <errno.h>
 #include <stdarg.h>
 #include <stdbool.h>
@@ -11,6 +12,8 @@
 #include <unistd.h>
 
 #define FILENAME "terminal.c"
+
+StringBuilder *g_error_buffer = NULL;
 
 struct {
     uint16_t row_ct;
@@ -101,6 +104,12 @@ static void disable_raw_mode(void) {
     if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &g_term.orig_termios) == -1) {
         printf(CLEAR_SCREEN RESET_CURSOR SHOW_CURSOR);
         report_system_error(FILENAME ": failed to disable raw mode");
+    }
+    if (g_error_buffer) {
+        printf(CLEAR_SCREEN RESET_CURSOR SHOW_CURSOR);
+        fflush(stdout);
+        string_builder_print(g_error_buffer);
+        string_builder_destroy(g_error_buffer);
         exit(1);
     }
 }
@@ -150,4 +159,11 @@ void enable_raw_mode(void) {
         report_system_error(FILENAME ": failed to enter raw mode");
         exit(1);
     }
+}
+
+void append_terminal_error(const char *error) {
+    if (!g_error_buffer) {
+        g_error_buffer = string_builder_create();
+    }
+    string_builder_append(g_error_buffer, error);
 }
