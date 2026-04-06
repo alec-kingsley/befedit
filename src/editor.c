@@ -222,9 +222,7 @@ static void run_command(Editor *self, const char *cmd) {
         self->buffer_idx %= list_len(self->buffers);
         self->buffer = list_get(self->buffers, self->buffer_idx);
         break;
-    case CLEAN_WHITESPACE:
-        buffer_clean_whitespace(self->buffer);
-        break;
+    case CLEAN_WHITESPACE: buffer_clean_whitespace(self->buffer); break;
     case UNKNOWN:
         self->status_message_is_error = true;
         string_builder_set(self->status_message, "unrecognized command: ");
@@ -329,7 +327,8 @@ void editor_run(Editor *self) {
             command_mode(self);
             keep_running = !list_is_empty(self->buffers);
         } else {
-            if (key == 'i' && mode != INSERT) {
+            if ((key == 'i' || key == 'I' || key == 'a' || key == 'A')
+                && mode != INSERT) {
                 mode = INSERT;
             } else if (key == ESC_KEY && mode != NORMAL) {
                 mode = NORMAL;
