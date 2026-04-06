@@ -2,8 +2,8 @@
 
 struct Action {
     direction_t momentum;
-    uint16_t row;
-    uint16_t col;
+    int16_t row;
+    int16_t col;
     Keystroke *keystroke;
 };
 
@@ -11,19 +11,19 @@ Keystroke *action_get_keystroke(Action *self) {
     return self->keystroke;
 }
 
-uint16_t action_get_row(Action *self) {
+int32_t action_get_row(Action *self) {
     return self->row;
 }
 
-void action_set_row(Action *self, uint16_t row) {
+void action_set_row(Action *self, int32_t row) {
     self->row = row;
 }
 
-uint16_t action_get_col(Action *self) {
+int32_t action_get_col(Action *self) {
     return self->col;
 }
 
-void action_set_col(Action *self, uint16_t col) {
+void action_set_col(Action *self, int32_t col) {
     self->col = col;
 }
 
@@ -31,7 +31,7 @@ direction_t action_get_momentum(Action *self) {
     return self->momentum;
 }
 
-Action *action_create(Keystroke *keystroke, uint16_t row, uint16_t col,
+Action *action_create(Keystroke *keystroke, int32_t row, int32_t col,
                       direction_t momentum) {
     Action *self = malloc(sizeof(Action));
     if (self == NULL) goto action_create_fail;

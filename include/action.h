@@ -16,22 +16,22 @@ Keystroke *action_get_keystroke(Action *self);
 /**
  * Get row.
  */
-uint16_t action_get_row(Action *self);
+int32_t action_get_row(Action *self);
 
 /**
  * Set row.
  */
-void action_set_row(Action *self, uint16_t row);
+void action_set_row(Action *self, int32_t row);
 
 /**
  * Get column.
  */
-uint16_t action_get_col(Action *self);
+int32_t action_get_col(Action *self);
 
 /**
  * Set column.
  */
-void action_set_col(Action *self, uint16_t col);
+void action_set_col(Action *self, int32_t col);
 
 /**
  * Get momentum.
@@ -44,8 +44,10 @@ direction_t action_get_momentum(Action *self);
  *
  * Ownership of `keystroke` is passed to Action, and Action should be
  * expected to destroy it at `action_destroy`
+ *
+ * `row` and `column` can be negative in the case of being off-screen.
  */
-Action *action_create(Keystroke *keystroke, uint16_t row, uint16_t col,
+Action *action_create(Keystroke *keystroke, int32_t row, int32_t col,
                       direction_t momentum);
 
 /**

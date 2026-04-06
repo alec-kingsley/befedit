@@ -148,15 +148,93 @@ static void follow_momentum(Buffer *self) {
     follow_direction(self, self->momentum);
 }
 
-static void add_row_top(Buffer *self) {
+/**
+ * Add 1 to all rows greater than or equal to `row`.
+ */
+static void insert_action_row(Buffer *self, int32_t row) {
     size_t i;
     Action *undo_action, *redo_action;
+    int32_t undo_row, redo_row;
     for (i = 0; i < stack_len(self->undo_stack); i++) {
         undo_action = stack_get(self->undo_stack, i);
         redo_action = stack_get(self->redo_stack, i);
-        action_set_row(undo_action, action_get_row(undo_action) + 1);
-        action_set_row(redo_action, action_get_row(redo_action) + 1);
+        undo_row = action_get_row(undo_action);
+        redo_row = action_get_row(redo_action);
+        if (undo_row >= row) {
+            action_set_row(undo_action, undo_row + 1);
+        }
+        if (redo_row >= row) {
+            action_set_row(redo_action, redo_row + 1);
+        }
     }
+}
+
+/**
+ * Add 1 to all columns greater than or equal to `col`.
+ */
+static void insert_action_col(Buffer *self, int32_t col) {
+    size_t i;
+    Action *undo_action, *redo_action;
+    int32_t undo_col, redo_col;
+    for (i = 0; i < stack_len(self->undo_stack); i++) {
+        undo_action = stack_get(self->undo_stack, i);
+        redo_action = stack_get(self->redo_stack, i);
+        undo_col = action_get_col(undo_action);
+        redo_col = action_get_col(redo_action);
+        if (undo_col >= col) {
+            action_set_col(undo_action, undo_col + 1);
+        }
+        if (redo_col >= col) {
+            action_set_col(redo_action, redo_col + 1);
+        }
+    }
+}
+
+/**
+ * Remove 1 from all rows greater than or equal to `row`.
+ */
+static void remove_action_row(Buffer *self, int32_t row) {
+    size_t i;
+    Action *undo_action, *redo_action;
+    int32_t undo_row, redo_row;
+    for (i = 0; i < stack_len(self->undo_stack); i++) {
+        undo_action = stack_get(self->undo_stack, i);
+        redo_action = stack_get(self->redo_stack, i);
+        undo_row = action_get_row(undo_action);
+        redo_row = action_get_row(redo_action);
+        if (undo_row >= row) {
+            action_set_row(undo_action, undo_row - 1);
+        }
+        if (redo_row >= row) {
+            action_set_row(redo_action, redo_row - 1);
+        }
+    }
+}
+
+/**
+ * Remove 1 from all columns greater than or equal to `col`.
+ */
+static void remove_action_col(Buffer *self, int32_t col) {
+    size_t i;
+    Action *undo_action, *redo_action;
+    int32_t undo_col, redo_col;
+    for (i = 0; i < stack_len(self->undo_stack); i++) {
+        undo_action = stack_get(self->undo_stack, i);
+        redo_action = stack_get(self->redo_stack, i);
+        undo_col = action_get_col(undo_action);
+        redo_col = action_get_col(redo_action);
+        if (undo_col >= col) {
+            action_set_col(undo_action, undo_col - 1);
+        }
+        if (redo_col >= col) {
+            action_set_col(redo_action, redo_col - 1);
+        }
+    }
+}
+
+static void add_row_top(Buffer *self) {
+    /* int32_min so it's not between actions */
+    insert_action_row(self, INT32_MIN);
     string_builder_insert(self->contents, 0, "\n");
 }
 
@@ -164,14 +242,8 @@ static void add_column_left(Buffer *self) {
     size_t contents_idx = 0;
     size_t contents_len = string_builder_len(self->contents) + 1;
     char contents_char;
-    size_t i;
-    Action *undo_action, *redo_action;
-    for (i = 0; i < stack_len(self->undo_stack); i++) {
-        undo_action = stack_get(self->undo_stack, i);
-        redo_action = stack_get(self->redo_stack, i);
-        action_set_col(undo_action, action_get_col(undo_action) + 1);
-        action_set_col(redo_action, action_get_col(redo_action) + 1);
-    }
+    /* int32_min so it's not between actions */
+    insert_action_col(self, INT32_MIN);
     self->top_row_contents_idx += self->top_offset;
     string_builder_insert(self->contents, 0, " ");
     while (contents_idx < contents_len) {
@@ -404,7 +476,13 @@ static void redo_last_action(Buffer *self, bool is_simulated) {
 
 static void simulate_action(Buffer *self, Action *action) {
     Keystroke *keystroke = action_get_keystroke(action);
+    while (action_get_col(action) < 0) {
+        add_column_left(self);
+    }
     self->cursor_col = action_get_col(action);
+    while (action_get_row(action) < 0) {
+        add_row_top(self);
+    }
     self->cursor_row = action_get_row(action);
     self->momentum = action_get_momentum(action);
     execute_keystroke(self, keystroke, true);
@@ -416,7 +494,13 @@ static void undo(Buffer *self) {
         undo_action = stack_get(self->undo_stack, self->stack_idx);
         redo_action = stack_get(self->redo_stack, self->stack_idx);
         simulate_action(self, undo_action);
+        while (action_get_col(redo_action) < 0) {
+            add_column_left(self);
+        }
         self->cursor_col = action_get_col(redo_action);
+        while (action_get_row(redo_action) < 0) {
+            add_row_top(self);
+        }
         self->cursor_row = action_get_row(redo_action);
         self->momentum = action_get_momentum(redo_action);
         self->stack_idx++;
@@ -719,12 +803,15 @@ static void buffer_clean_vertical_whitespace(Buffer *self) {
     size_t contents_len = string_builder_len(self->contents);
     bool found_first = false, found_last = false;
     char c;
+    int32_t remove_row_target = 0;
     /* size_max if there is no last new line */
     size_t last_new_line_idx = SIZE_MAX;
     for (i = 0; i < contents_len && !found_first; i++) {
         c = string_builder_get_char(self->contents, i);
         if (c == '\n') {
             last_new_line_idx = i;
+            remove_action_row(self, remove_row_target);
+            remove_row_target--;
         } else if (c != ' ' && c != '\t') {
             found_first = true;
         }
@@ -758,6 +845,10 @@ static void buffer_remove_left_columns(Buffer *self, size_t column_ct) {
     char contents_char;
     size_t col = 0;
     size_t line_start = 0;
+    int32_t i = 0;
+    for (i = 0; i < (int32_t)column_ct; i++) {
+        remove_action_col(self, -i);
+    }
     while (contents_idx < string_builder_len(self->contents)) {
         contents_char = string_builder_get_char(self->contents, contents_idx);
         if (col == column_ct || (contents_char == '\n' && col <= column_ct)) {
