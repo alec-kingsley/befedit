@@ -35,20 +35,22 @@ due to this.
 
 ## Normal Mode actions
 
- - `i` - enter insert mode at current character
- - `a` - enter insert mode after current character
- - `I` - enter insert mode at start of line
- - `A` - enter insert mode at end of line
- - `.` - redo previous action (unlike other editors, movement does NOT count as an action)
- - `u` - undo previous action
- - `U` - redo undid action
- - `^` - jump to start of line
- - `$` - jump to end of line
- - `v` - enter select mode
- - `p` - paste yanked selection (rotates according to momentum)
- - `d` - delete current character
- - `y` - yank current character
- - `r` - replace a key
+| Action | Description                                                                        |
+| :----: | :--------------------------------------------------------------------------------- |
+| `i`    | enter insert mode at current character                                             |
+| `a`    | enter insert mode after current character                                          |
+| `I`    | enter insert mode at start of line                                                 |
+| `A`    | enter insert mode at end of line                                                   |
+| `.`    | redo previous action (unlike other editors, movement does NOT count as an action)  |
+| `u`    | undo previous action                                                               |
+| `U`    | redo undid action                                                                  |
+| `^`    | jump to start of line                                                              |
+| `$`    | jump to end of line                                                                |
+| `v`    | enter select mode                                                                  |
+| `p`    | paste yanked selection (rotates according to momentum)                             |
+| `d`    | delete current character                                                           |
+| `y`    | yank current character                                                             |
+| `r`    | replace a key                                                                      |
 
 Example of `.`:
 
