@@ -149,6 +149,14 @@ static void follow_momentum(Buffer *self) {
 }
 
 static void add_row_top(Buffer *self) {
+    size_t i;
+    Action *undo_action, *redo_action;
+    for (i = 0; i < stack_len(self->undo_stack); i++) {
+        undo_action = stack_get(self->undo_stack, i);
+        redo_action = stack_get(self->redo_stack, i);
+        action_set_row(undo_action, action_get_row(undo_action) + 1);
+        action_set_row(redo_action, action_get_row(redo_action) + 1);
+    }
     string_builder_insert(self->contents, 0, "\n");
 }
 
@@ -156,6 +164,14 @@ static void add_column_left(Buffer *self) {
     size_t contents_idx = 0;
     size_t contents_len = string_builder_len(self->contents) + 1;
     char contents_char;
+    size_t i;
+    Action *undo_action, *redo_action;
+    for (i = 0; i < stack_len(self->undo_stack); i++) {
+        undo_action = stack_get(self->undo_stack, i);
+        redo_action = stack_get(self->redo_stack, i);
+        action_set_col(undo_action, action_get_col(undo_action) + 1);
+        action_set_col(redo_action, action_get_col(redo_action) + 1);
+    }
     self->top_row_contents_idx += self->top_offset;
     string_builder_insert(self->contents, 0, " ");
     while (contents_idx < contents_len) {
@@ -729,8 +745,8 @@ static void buffer_clean_vertical_whitespace(Buffer *self) {
     } while (i != 0 && !found_last);
 
     /* remove lines at end */
-    if (found_last) {
-        string_builder_remove_range(self->contents, i, contents_len);
+    if (found_last && i + 1 <= contents_len) {
+        string_builder_remove_range(self->contents, i + 1, contents_len);
     }
 
     /* ensure new line at end */

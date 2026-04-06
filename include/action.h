@@ -19,9 +19,19 @@ Keystroke *action_get_keystroke(Action *self);
 uint16_t action_get_row(Action *self);
 
 /**
+ * Set row.
+ */
+void action_set_row(Action *self, uint16_t row);
+
+/**
  * Get column.
  */
 uint16_t action_get_col(Action *self);
+
+/**
+ * Set column.
+ */
+void action_set_col(Action *self, uint16_t col);
 
 /**
  * Get momentum.

@@ -15,8 +15,16 @@ uint16_t action_get_row(Action *self) {
     return self->row;
 }
 
+void action_set_row(Action *self, uint16_t row) {
+    self->row = row;
+}
+
 uint16_t action_get_col(Action *self) {
     return self->col;
+}
+
+void action_set_col(Action *self, uint16_t col) {
+    self->col = col;
 }
 
 direction_t action_get_momentum(Action *self) {

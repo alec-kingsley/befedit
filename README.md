@@ -94,4 +94,4 @@ if it's been unmodified since opening.
  - `x` - save and close buffer
  - `w` - save buffer
  - `n` - next buffer
- - `cw` - clean whitespace on edges (leaves one new line at en
+ - `cw` - clean unnecessary whitespace
