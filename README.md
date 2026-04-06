@@ -88,10 +88,14 @@ if it's been unmodified since opening.
 
 `:` enters command mode. The following commands are currently supported:
 
- - `q` - close buffer (won't work with unsaved changes)
- - `q!` - close buffer without saving
- - `wq` - save and close buffer
- - `x` - save and close buffer
- - `w` - save buffer
- - `n` - next buffer
- - `cw` - clean unnecessary whitespace
+| Command            | Shorthand | Description                   |
+| :----------------- | :-------- | :---------------------------- |
+| quit               | q         | close buffer                  |
+| quit!              | q!        | close buffer w/o saving       |
+| quit-all           | qa        | close all buffers             |
+| quit-all!          | qa!       | close all buffers w/o saving  |
+| write-quit         | wq        | save and close buffer         |
+| write-quit         | x         | save and close buffer         |
+| write-quit-all     | wqa       | save and close all buffers    |
+| next               | n         | next buffer                   |
+| clean-whitespace   | cw        | remove unnecessary whitespace |
