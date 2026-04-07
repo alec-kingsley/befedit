@@ -2,9 +2,18 @@
 
 A modal text editor for 2D languages, such as Befunge, ><>, or even ASCII art.
 
+Basic directional usage
+
 ![demo](./assets/demo.gif)
 
+Copy/paste feature
+
 ![yank demo](./assets/yankdemo.gif)
+
+Example of writing a Funge-98 program that prompts for a decimal number, then prints it
+out in binary followed by a new line. (Assumes BASE fingerprint support)
+
+![befunge demo](./assets/binarydemo.gif)
 
 ## Installation
 
