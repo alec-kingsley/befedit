@@ -57,8 +57,8 @@ for your cursor to move to these positions.
 | `v`    | enter select mode                                                                  |
 | `p`    | paste yanked selection (rotates according to momentum)                             |
 | `d`    | delete current character                                                           |
-| `y`    | yank current character                                                             |
-| `r`    | replace a key                                                                      |
+| `y`    | copy (yank) current character                                                      |
+| `r`    | replace a character                                                                |
 
 Example of `.`:
 
