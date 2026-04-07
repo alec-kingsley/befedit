@@ -79,7 +79,8 @@ line. The orientation of the line is defined based on this.
 
 ## Select mode interactions
 
- - hjkl and arrow keys - move around (no momentum involved)
+ - hjkl and arrow keys - move around (instantly updates movement and momentum, although the momentum
+only matters once select mode is exit)
  - `y` - yank a selection
  - `d` - delete a selection
  - `<esc>` - exit select mode
