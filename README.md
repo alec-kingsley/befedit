@@ -113,3 +113,14 @@ if it's been unmodified since opening.
 | next               | n         | next buffer                   |
 | clean-whitespace   | cw        | remove unnecessary whitespace |
 | open \<file>       | o \<file> | open a new buffer             |
+| config-open        |           | open config file              |
+| config-reload      |           | reload config                 |
+
+## Configuration
+
+The config file is written in Befunge and located at `~/.config/befedit/config.b98`.
+
+If it takes > 2 sec to run the config program, it will give up.
+
+Currently, it will just print the result of the program as a status message.
+

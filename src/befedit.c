@@ -1,4 +1,5 @@
 #include "editor.h"
+#include <time.h>
 
 #define FILENAME "befedit.c"
 
@@ -6,6 +7,7 @@ int main(int argc, char **argv) {
     Editor *editor = editor_create();
     int i;
     Buffer *buffer;
+    srand(time(NULL));
     if (!editor) return 1;
     for (i = 1; i < argc; i++) {
         buffer = buffer_create(argv[i]);

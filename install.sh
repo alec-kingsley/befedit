@@ -25,6 +25,7 @@ function log_warn {
 }
 
 BEFEDIT_HOME=/usr/local/bin/befedit
+CONFIG_HOME=~/.config/befedit/config.b98
 
 function build_befedit {
   if ! make; then
@@ -44,6 +45,12 @@ function install_befedit {
     else
       exit 1
     fi
+  fi
+
+  if [ ! -e "$CONFIG_HOME" ]; then
+    mkdir -p "${CONFIG_HOME%/*}"
+    touch "$CONFIG_HOME"
+    echo "@" > "$CONFIG_HOME"
   fi
 
   sudo cp bin/befedit "$BEFEDIT_HOME"

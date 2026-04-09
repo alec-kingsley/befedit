@@ -39,6 +39,12 @@ bool string_builder_set(StringBuilder *self, const char *new);
  * Insert `other` to `string_builder` at index `index`.
  * Return `true` on success.
  */
+bool string_builder_insert_char(StringBuilder *self, size_t index, char);
+
+/**
+ * Insert `other` to `string_builder` at index `index`.
+ * Return `true` on success.
+ */
 bool string_builder_insert(StringBuilder *self, size_t index, const char *other);
 
 /**

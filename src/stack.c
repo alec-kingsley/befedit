@@ -97,10 +97,12 @@ stack_create_fail:
 }
 
 void stack_destroy(Stack *self) {
-    if (self != NULL) {
-        if (self->free_fun != NULL) {
-            while (self->head != NULL) {
-                self->free_fun(stack_pop(self));
+    Node *node;
+    if (self) {
+        while (self->head != NULL) {
+            node = stack_pop(self);
+            if (self->free_fun != NULL) {
+                self->free_fun(node);
             }
         }
         free(self);

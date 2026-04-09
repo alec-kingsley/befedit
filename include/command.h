@@ -16,6 +16,8 @@ typedef enum {
     NEXT,
     CLEAN_WHITESPACE,
     OPEN,
+    CONFIG_OPEN,
+    CONFIG_RELOAD,
     EMPTY,  /* no command given */
     UNKNOWN /* unrecognized command */
 } command_t;

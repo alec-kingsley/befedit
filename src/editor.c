@@ -1,15 +1,21 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include "editor.h"
 #include "buffer.h"
 #include "colors.h"
 #include "command.h"
 #include "direction.h"
+#include "interpreter.h"
 #include "list.h"
+#include "pthread.h"
 #include "reporter.h"
 #include "string_builder.h"
 #include "terminal.h"
+#include <errno.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 
 #define FILENAME "editor.c"
@@ -22,6 +28,7 @@ struct Editor {
     size_t buffer_idx;
     StringBuilder *status_message;
     bool status_message_is_error;
+    char *config_path;
 };
 
 static void reset_status_message(Editor *self) {
@@ -234,6 +241,8 @@ static bool check_args(Editor *self, Command *command) {
     case NEXT:
     case CLEAN_WHITESPACE: expected_arg_ct = 1; break;
     case OPEN: expected_arg_ct = 2; break;
+    case CONFIG_OPEN:
+    case CONFIG_RELOAD: expected_arg_ct = 1; break;
     case EMPTY: expected_arg_ct = 0; break;
     case UNKNOWN: break;
     }
@@ -243,6 +252,15 @@ static bool check_args(Editor *self, Command *command) {
         return false;
     }
     return true;
+}
+
+static bool check_config_exists(Editor *self);
+static void editor_load_config(Editor *self);
+
+static void editor_config_open(Editor *self) {
+    if (check_config_exists(self)) {
+        editor_open(self, self->config_path);
+    }
 }
 
 static void run_command(Editor *self, const char *cmd) {
@@ -261,13 +279,16 @@ static void run_command(Editor *self, const char *cmd) {
         case NEXT: editor_next(self); break;
         case CLEAN_WHITESPACE: buffer_clean_whitespace(self->buffer); break;
         case OPEN: editor_open(self, command_get_arg(command, 1)); break;
+        case CONFIG_OPEN: editor_config_open(self); break;
+        case CONFIG_RELOAD: editor_load_config(self); break;
         case EMPTY:
             /* do nothing */
             break;
         case UNKNOWN:
             self->status_message_is_error = true;
             string_builder_set(self->status_message, "unrecognized command: ");
-            string_builder_append(self->status_message, command_get_arg(command, 0));
+            string_builder_append(self->status_message,
+                                  command_get_arg(command, 0));
         }
     }
     command_destroy(command);
@@ -334,6 +355,135 @@ void editor_add_buffer(Editor *self, Buffer *buffer) {
     list_insert(self->buffers, buffer, list_len(self->buffers));
 }
 
+#define CONFIG_PATH_FROM_HOME "/.config/befedit/config.b98"
+
+static void set_config_path(Editor *self) {
+    StringBuilder *config_path;
+    const char *home_path = getenv("HOME");
+
+    if (!home_path) {
+        self->config_path = NULL;
+        return;
+    }
+
+    config_path = string_builder_create();
+    string_builder_set(config_path, home_path);
+    string_builder_append(config_path, CONFIG_PATH_FROM_HOME);
+    self->config_path = malloc(string_builder_len(config_path) + 1);
+    strcpy(self->config_path, string_builder_to_string(config_path));
+    string_builder_destroy(config_path);
+}
+
+/**
+ * Return `true` iff exists and is readable.
+ */
+static bool check_config_exists(Editor *self) {
+    FILE *config;
+
+    if (!self->config_path) {
+        self->status_message_is_error = true;
+        string_builder_set(self->status_message,
+                           "failed to find config, is $HOME set?");
+        return false;
+    }
+
+    config = fopen(self->config_path, "r");
+    if (config) {
+        fclose(config);
+        return true;
+    } else {
+        self->status_message_is_error = true;
+        string_builder_set(self->status_message, "failed to find config at: ");
+        string_builder_append(self->status_message, self->config_path);
+        return false;
+    }
+}
+
+typedef struct {
+    Interpreter *interpreter;
+    pthread_mutex_t *mutex;
+    pthread_cond_t *cond;
+    bool *finished;
+} interpreter_thread_args_t;
+
+static void *interpreter_run_wrapper(void *arg) {
+    interpreter_thread_args_t *args = (interpreter_thread_args_t *)arg;
+    interpreter_run(args->interpreter);
+
+    pthread_mutex_lock(args->mutex);
+    *args->finished = true;
+    pthread_cond_signal(args->cond);
+    pthread_mutex_unlock(args->mutex);
+
+    return NULL;
+}
+
+#define CONFIG_TIMEOUT_SEC 2
+
+static void editor_load_config(Editor *self) {
+    interpreter_thread_args_t args;
+    Interpreter *interpreter;
+    pthread_t thread;
+    struct timespec timeout;
+    pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+    pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
+    bool finished = false;
+    int ret;
+
+    if (check_config_exists(self)) {
+        interpreter = interpreter_create(self->config_path);
+        if (interpreter == NULL) exit(1);
+
+        args.interpreter = interpreter;
+        args.mutex = &mutex;
+        args.cond = &cond;
+        args.finished = &finished;
+
+        if (pthread_create(&thread, NULL, interpreter_run_wrapper, &args)) {
+            report_system_error(FILENAME ": failed to spawn thread");
+            exit(1);
+        }
+        if (clock_gettime(CLOCK_REALTIME, &timeout)) {
+            report_system_error(FILENAME ": failed to get time");
+            exit(1);
+        }
+        timeout.tv_sec += CONFIG_TIMEOUT_SEC;
+
+        pthread_mutex_lock(&mutex);
+        while (!finished) {
+            ret = pthread_cond_timedwait(&cond, &mutex, &timeout);
+            if (ret == ETIMEDOUT) {
+                break;
+            } else if (ret != 0) {
+                report_system_error(FILENAME ": failed to wait");
+                exit(1);
+            }
+        }
+        pthread_mutex_unlock(&mutex);
+
+        if (finished) {
+            pthread_join(thread, NULL);
+            if (interpreter_is_poisoned(interpreter)) {
+                self->status_message_is_error = true;
+                string_builder_set(self->status_message, "config error: ");
+            } else {
+                string_builder_set(self->status_message, "");
+            }
+            string_builder_append(self->status_message,
+                                  interpreter_get_output(interpreter));
+        } else {
+            pthread_detach(thread);
+            /* timed out */
+            self->status_message_is_error = true;
+            string_builder_set(self->status_message, "config file timed out");
+        }
+
+        interpreter_destroy(interpreter);
+    }
+    pthread_mutex_destroy(&mutex);
+    pthread_cond_destroy(&cond);
+}
+
 void editor_run(Editor *self) {
     key_t key;
     bool keep_running = true;
@@ -346,6 +496,11 @@ void editor_run(Editor *self) {
         self->buffer = list_get(self->buffers, 0);
     }
     enable_raw_mode();
+
+    string_builder_set(self->status_message, "loading config...");
+    update_screen(self, mode);
+
+    editor_load_config(self);
 
     while (keep_running) {
         update_screen(self, mode);
@@ -381,6 +536,8 @@ Editor *editor_create(void) {
     self->status_message = string_builder_create();
     if (!self->status_message) goto editor_create_fail;
 
+    set_config_path(self);
+
     reset_status_message(self);
     self->buffer_idx = 0;
 
@@ -394,6 +551,7 @@ void editor_destroy(Editor *self) {
     if (self) {
         list_destroy(self->buffers);
         string_builder_destroy(self->status_message);
+        free(self->config_path);
         free(self);
     }
 }

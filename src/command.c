@@ -75,6 +75,10 @@ static void init_command(Command *self) {
         self->command = CLEAN_WHITESPACE;
     } else if (strcmp(cmd, "o") == 0 || strcmp(cmd, "open") == 0) {
         self->command = OPEN;
+    } else if (strcmp(cmd, "config-open") == 0) {
+        self->command = CONFIG_OPEN;
+    } else if (strcmp(cmd, "config-reload") == 0) {
+        self->command = CONFIG_RELOAD;
     } else {
         self->command = UNKNOWN;
     }

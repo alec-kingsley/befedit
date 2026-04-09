@@ -70,6 +70,20 @@ bool string_builder_set(StringBuilder *self, const char *new) {
     return true;
 }
 
+bool string_builder_insert_char(StringBuilder *self, size_t index, char other) {
+    const size_t new_size = (self->len + 1) * sizeof(char);
+    while (self->size < new_size) {
+        if (!expand(self)) {
+            return false;
+        }
+    }
+    memmove(self->val + index + 1, self->val + index,
+            (self->len - index) * sizeof(char));
+    memcpy(self->val + index, &other, 1 * sizeof(char));
+    self->len++;
+    return true;
+}
+
 bool string_builder_insert(StringBuilder *self, size_t index,
                            const char *other) {
     const size_t other_len = strlen(other);
@@ -111,8 +125,7 @@ bool string_builder_append(StringBuilder *self, const char *other) {
     return true;
 }
 
-bool string_builder_append_bytes(StringBuilder *self, const char *other,
-                                 size_t n) {
+bool string_builder_append_bytes(StringBuilder *self, const char *other, size_t n) {
     const size_t new_size = (self->len + n) * sizeof(char);
     while (self->size < new_size) {
         if (!expand(self)) {
