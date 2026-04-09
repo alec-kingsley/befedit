@@ -10,10 +10,13 @@ Copy/paste feature
 
 ![yank demo](./assets/yankdemo.gif)
 
-Example of writing a Funge-98 program that prompts for a decimal number, then prints it
+Example of writing a Befunge-98 program that prompts for a decimal number, then prints it
 out in binary followed by a new line. (Assumes BASE fingerprint support)
 
 ![befunge demo](./assets/binarydemo.gif)
+
+Befunge-98 config
+![config demo](./assets/configdemo.gif)
 
 ## Installation
 
@@ -118,7 +121,7 @@ if it's been unmodified since opening.
 
 ## Configuration
 
-The config file is written in Befunge and located at `~/.config/befedit/config.b98`.
+The config file is written in Befunge-98 and located at `~/.config/befedit/config.b98`.
 
 If it takes > 2 sec to run the config program, it will give up.
 
