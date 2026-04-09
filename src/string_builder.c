@@ -111,6 +111,19 @@ bool string_builder_append(StringBuilder *self, const char *other) {
     return true;
 }
 
+bool string_builder_append_bytes(StringBuilder *self, const char *other,
+                                 size_t n) {
+    const size_t new_size = (self->len + n) * sizeof(char);
+    while (self->size < new_size) {
+        if (!expand(self)) {
+            return false;
+        }
+    }
+    memcpy(self->val + self->len, other, n * sizeof(char));
+    self->len += n;
+    return true;
+}
+
 void string_builder_restrict(StringBuilder *self, size_t start, int32_t end) {
     const size_t end_pos = end > 0 ? (size_t)end : self->len + end;
     const size_t new_len = end_pos - start;

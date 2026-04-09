@@ -1097,14 +1097,13 @@ bool buffer_is_modified(Buffer *self) {
  */
 static bool init_buffer(Buffer *self) {
     FILE *file = fopen(self->filename, "r");
-    char chunk[CHUNK_SIZE + 1];
+    char chunk[CHUNK_SIZE];
     size_t n;
 
     if (file) {
         do {
-            n = fread(chunk, 1, CHUNK_SIZE, file);
-            chunk[n] = '\0';
-            string_builder_append(self->contents, chunk);
+            n = fread(chunk, sizeof(char), CHUNK_SIZE, file);
+            string_builder_append_bytes(self->contents, chunk, n);
         } while (n == CHUNK_SIZE);
         fclose(file);
     }

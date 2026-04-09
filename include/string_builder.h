@@ -54,6 +54,14 @@ bool string_builder_append_char(StringBuilder *self, char other);
 bool string_builder_append(StringBuilder *self, const char *other);
 
 /**
+ * Append `other` to `string_builder`.
+ * `other` must have length `n`.
+ * This is for if `other` may contain null bytes.
+ * Return `true` on success.
+ */
+bool string_builder_append_bytes(StringBuilder *self, const char *other, size_t n);
+
+/**
  * Restrict the range of the `string_builder` to [start, end).
  * If `end` is less than 1, then it will be places from the end.
  * For example, `string_builder_restrict(original, 0, 0)` would do
