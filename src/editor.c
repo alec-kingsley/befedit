@@ -209,27 +209,69 @@ static void editor_next(Editor *self) {
     self->buffer = list_get(self->buffers, self->buffer_idx);
 }
 
+static void editor_open(Editor *self, const char *name) {
+    Buffer *buffer = buffer_create(name);
+    self->buffer = buffer;
+    editor_add_buffer(self, buffer);
+    self->buffer_idx = list_len(self->buffers) - 1;
+}
+
+/**
+ * Return `true` iff args look good.
+ */
+static bool check_args(Editor *self, Command *command) {
+    size_t expected_arg_ct = 1;
+    command_t cmd = command_get_command(command);
+    switch (cmd) {
+    case WRITE:
+    case WRITE_QUIT:
+    case FORCE_QUIT:
+    case QUIT:
+    case WRITE_ALL:
+    case WRITE_QUIT_ALL:
+    case QUIT_ALL:
+    case FORCE_QUIT_ALL:
+    case NEXT:
+    case CLEAN_WHITESPACE: expected_arg_ct = 1; break;
+    case OPEN: expected_arg_ct = 2; break;
+    case EMPTY:
+        expected_arg_ct = 0;
+        /* do nothing */
+        break;
+    case UNKNOWN: break;
+    }
+    if (cmd != UNKNOWN && command_arg_ct(command) != expected_arg_ct) {
+        self->status_message_is_error = true;
+        string_builder_set(self->status_message, "incorrect # of args");
+        return false;
+    }
+    return true;
+}
+
 static void run_command(Editor *self, const char *cmd) {
     Command *command = command_create(cmd);
     if (!command) return;
-    switch (command_get_command(command)) {
-    case WRITE: editor_write(self); break;
-    case WRITE_QUIT: editor_write_quit(self); break;
-    case FORCE_QUIT: editor_force_quit(self); break;
-    case QUIT: editor_quit(self); break;
-    case WRITE_ALL: editor_write_all(self); break;
-    case WRITE_QUIT_ALL: editor_write_quit_all(self); break;
-    case QUIT_ALL: editor_quit_all(self); break;
-    case FORCE_QUIT_ALL: editor_force_quit_all(self); break;
-    case NEXT: editor_next(self); break;
-    case CLEAN_WHITESPACE: buffer_clean_whitespace(self->buffer); break;
-    case EMPTY:
-        /* do nothing */
-        break;
-    case UNKNOWN:
-        self->status_message_is_error = true;
-        string_builder_set(self->status_message, "unrecognized command: ");
-        string_builder_append(self->status_message, cmd);
+    if (check_args(self, command)) {
+        switch (command_get_command(command)) {
+        case WRITE: editor_write(self); break;
+        case WRITE_QUIT: editor_write_quit(self); break;
+        case FORCE_QUIT: editor_force_quit(self); break;
+        case QUIT: editor_quit(self); break;
+        case WRITE_ALL: editor_write_all(self); break;
+        case WRITE_QUIT_ALL: editor_write_quit_all(self); break;
+        case QUIT_ALL: editor_quit_all(self); break;
+        case FORCE_QUIT_ALL: editor_force_quit_all(self); break;
+        case NEXT: editor_next(self); break;
+        case CLEAN_WHITESPACE: buffer_clean_whitespace(self->buffer); break;
+        case OPEN: editor_open(self, command_get_arg(command, 1)); break;
+        case EMPTY:
+            /* do nothing */
+            break;
+        case UNKNOWN:
+            self->status_message_is_error = true;
+            string_builder_set(self->status_message, "unrecognized command: ");
+            string_builder_append(self->status_message, cmd);
+        }
     }
     command_destroy(command);
 }

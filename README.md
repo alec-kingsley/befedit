@@ -112,3 +112,4 @@ if it's been unmodified since opening.
 | write-quit-all     | wqa       | save and close all buffers    |
 | next               | n         | next buffer                   |
 | clean-whitespace   | cw        | remove unnecessary whitespace |
+| open \<file>       | o \<file> | open a new buffer             |

@@ -73,6 +73,8 @@ static void init_command(Command *self) {
         self->command = NEXT;
     } else if (strcmp(cmd, "cw") == 0 || strcmp(cmd, "clean-whitespace") == 0) {
         self->command = CLEAN_WHITESPACE;
+    } else if (strcmp(cmd, "o") == 0 || strcmp(cmd, "open") == 0) {
+        self->command = OPEN;
     } else {
         self->command = UNKNOWN;
     }

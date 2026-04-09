@@ -15,6 +15,7 @@ typedef enum {
     FORCE_QUIT_ALL,
     NEXT,
     CLEAN_WHITESPACE,
+    OPEN,
     EMPTY,  /* no command given */
     UNKNOWN /* unrecognized command */
 } command_t;
