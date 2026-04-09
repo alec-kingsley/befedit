@@ -127,3 +127,6 @@ If it takes > 2 sec to run the config program, it will give up.
 
 Currently, it will just print the result of the program as a status message.
 
+The Befunge-98 interpreter used is the [SBI interpreter](https://github.com/alec-kingsley/sbi),
+with handprint `0x534249`
+
