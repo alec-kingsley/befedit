@@ -1,6 +1,7 @@
 #include "editor.h"
 #include "buffer.h"
 #include "colors.h"
+#include "command.h"
 #include "direction.h"
 #include "list.h"
 #include "reporter.h"
@@ -110,139 +111,127 @@ static void update_screen(Editor *self, mode_t mode) {
     string_builder_destroy(display);
 }
 
-typedef enum {
-    WRITE,
-    WRITE_QUIT,
-    QUIT,
-    FORCE_QUIT,
-    WRITE_ALL,
-    WRITE_QUIT_ALL,
-    QUIT_ALL,
-    FORCE_QUIT_ALL,
-    NEXT,
-    CLEAN_WHITESPACE,
-    UNKNOWN
-} command_t;
-
-static command_t read_command(const char *cmd) {
-    if (strcmp(cmd, "w") == 0 || strcmp(cmd, "write") == 0) {
-        return WRITE;
-    } else if (strcmp(cmd, "wq") == 0 || strcmp(cmd, "x") == 0
-               || strcmp(cmd, "write-quit") == 0) {
-        return WRITE_QUIT;
-    } else if (strcmp(cmd, "q") == 0 || strcmp(cmd, "quit") == 0) {
-        return QUIT;
-    } else if (strcmp(cmd, "q!") == 0 || strcmp(cmd, "quit!") == 0) {
-        return FORCE_QUIT;
-    } else if (strcmp(cmd, "wa") == 0 || strcmp(cmd, "write-all") == 0) {
-        return WRITE_ALL;
-    } else if (strcmp(cmd, "wqa") == 0 || strcmp(cmd, "xa") == 0
-               || strcmp(cmd, "write-quit-all") == 0) {
-        return WRITE_QUIT_ALL;
-    } else if (strcmp(cmd, "qa") == 0 || strcmp(cmd, "quit-all") == 0) {
-        return QUIT_ALL;
-    } else if (strcmp(cmd, "qa!") == 0 || strcmp(cmd, "quit-all!") == 0) {
-        return FORCE_QUIT_ALL;
-    } else if (strcmp(cmd, "n") == 0 || strcmp(cmd, "next") == 0) {
-        return NEXT;
-    } else if (strcmp(cmd, "cw") == 0 || strcmp(cmd, "clean-whitespace") == 0) {
-        return CLEAN_WHITESPACE;
+static void editor_force_quit(Editor *self) {
+    buffer_destroy(self->buffer);
+    list_remove(self->buffers, self->buffer_idx);
+    if (self->buffer_idx > 0) {
+        self->buffer_idx--;
     }
-    return UNKNOWN;
+    if (!list_is_empty(self->buffers)) {
+        self->buffer = list_get(self->buffers, self->buffer_idx);
+    }
+}
+
+static void editor_force_quit_all(Editor *self) {
+    while (!list_is_empty(self->buffers)) {
+        buffer_destroy(list_remove(self->buffers, 0));
+    }
+    self->buffer_idx = 0;
+}
+
+static void editor_quit(Editor *self) {
+    if (!buffer_is_modified(self->buffer)) {
+        editor_force_quit(self);
+    } else {
+        self->status_message_is_error = true;
+        string_builder_set(self->status_message,
+                           "cannot close modified buffer");
+    }
+}
+
+static void editor_quit_all(Editor *self) {
+    bool should_delete_all = true;
+    size_t i;
+    for (i = 0; i < list_len(self->buffers) && should_delete_all; i++) {
+        if (buffer_is_modified(list_get(self->buffers, i))) {
+            should_delete_all = false;
+        }
+    }
+    if (!should_delete_all) {
+        self->status_message_is_error = true;
+        string_builder_set(self->status_message,
+                           "cannot close modified buffer");
+    }
+}
+
+/**
+ * Return true iff successful.
+ */
+static bool editor_write(Editor *self) {
+    if (buffer_save(self->buffer)) {
+        string_builder_set(self->status_message, buffer_name(self->buffer));
+        string_builder_append(self->status_message, " written");
+        return true;
+    } else {
+        self->status_message_is_error = true;
+        string_builder_set(self->status_message, "failed to write buffer");
+        return false;
+    }
+}
+
+static void editor_write_quit(Editor *self) {
+    if (editor_write(self)) {
+        editor_force_quit(self);
+    }
+}
+
+/**
+ * Return true iff successful.
+ */
+static bool editor_write_all(Editor *self) {
+    size_t i;
+    bool all_successful = true;
+    for (i = 0; i < list_len(self->buffers); i++) {
+        if (buffer_is_modified(list_get(self->buffers, i))) {
+            if (!buffer_save(list_get(self->buffers, i))) {
+                all_successful = false;
+            }
+        }
+    }
+    if (all_successful) {
+        string_builder_set(self->status_message, "wrote all buffers");
+    } else {
+        self->status_message_is_error = true;
+        string_builder_set(self->status_message, "failed to write all buffers");
+    }
+    return all_successful;
+}
+
+static void editor_write_quit_all(Editor *self) {
+    if (editor_write_all(self)) {
+        editor_force_quit_all(self);
+    }
+}
+
+static void editor_next(Editor *self) {
+    self->buffer_idx++;
+    self->buffer_idx %= list_len(self->buffers);
+    self->buffer = list_get(self->buffers, self->buffer_idx);
 }
 
 static void run_command(Editor *self, const char *cmd) {
-    Buffer *buffer = self->buffer;
-    bool should_delete = false;
-    bool should_delete_all = false;
-    size_t i;
-    switch (read_command(cmd)) {
-    case WRITE:
-        if (buffer_save(buffer)) {
-            string_builder_set(self->status_message, buffer_name(self->buffer));
-            string_builder_append(self->status_message, " written");
-        } else {
-            self->status_message_is_error = true;
-            string_builder_set(self->status_message,
-                               "failed to write to buffer");
-        }
-        break;
-    case WRITE_QUIT:
-        should_delete = true;
-        if (buffer_save(buffer)) {
-            string_builder_set(self->status_message, buffer_name(self->buffer));
-            string_builder_append(self->status_message, " written");
-        } else {
-            self->status_message_is_error = true;
-            string_builder_set(self->status_message,
-                               "failed to write to buffer");
-        }
-        break;
-    case FORCE_QUIT: should_delete = true; break;
-    case QUIT:
-        if (!buffer_is_modified(buffer)) {
-            should_delete = true;
-        } else {
-            self->status_message_is_error = true;
-            string_builder_set(self->status_message,
-                               "cannot close modified buffer");
-        }
-        break;
-    case WRITE_ALL:
-        for (i = 0; i < list_len(self->buffers); i++) {
-            if (buffer_is_modified(list_get(self->buffers, i))) {
-                buffer_save(list_get(self->buffers, i));
-            }
-        }
-        break;
-    case WRITE_QUIT_ALL:
-        should_delete_all = true;
-        for (i = 0; i < list_len(self->buffers); i++) {
-            if (buffer_is_modified(list_get(self->buffers, i))) {
-                buffer_save(list_get(self->buffers, i));
-            }
-        }
-        break;
-    case QUIT_ALL:
-        should_delete_all = true;
-        for (i = 0; i < list_len(self->buffers) && should_delete_all; i++) {
-            if (buffer_is_modified(list_get(self->buffers, i))) {
-                should_delete_all = false;
-            }
-        }
-        if (!should_delete_all) {
-            self->status_message_is_error = true;
-            string_builder_set(self->status_message,
-                               "cannot close modified buffer");
-        }
-        break;
-    case FORCE_QUIT_ALL: should_delete_all = true; break;
-    case NEXT:
-        self->buffer_idx++;
-        self->buffer_idx %= list_len(self->buffers);
-        self->buffer = list_get(self->buffers, self->buffer_idx);
-        break;
+    Command *command = command_create(cmd);
+    if (!command) return;
+    switch (command_get_command(command)) {
+    case WRITE: editor_write(self); break;
+    case WRITE_QUIT: editor_write_quit(self); break;
+    case FORCE_QUIT: editor_force_quit(self); break;
+    case QUIT: editor_quit(self); break;
+    case WRITE_ALL: editor_write_all(self); break;
+    case WRITE_QUIT_ALL: editor_write_quit_all(self); break;
+    case QUIT_ALL: editor_quit_all(self); break;
+    case FORCE_QUIT_ALL: editor_force_quit_all(self); break;
+    case NEXT: editor_next(self); break;
     case CLEAN_WHITESPACE: buffer_clean_whitespace(self->buffer); break;
+    case EMPTY:
+        /* do nothing */
+        break;
     case UNKNOWN:
         self->status_message_is_error = true;
         string_builder_set(self->status_message, "unrecognized command: ");
         string_builder_append(self->status_message, cmd);
     }
-    if (should_delete) {
-        buffer_destroy(self->buffer);
-        list_remove(self->buffers, self->buffer_idx);
-        if (self->buffer_idx > 0) {
-            self->buffer_idx--;
-        }
-        if (!list_is_empty(self->buffers)) {
-            self->buffer = list_get(self->buffers, self->buffer_idx);
-        }
-    } else if (should_delete_all) {
-        while (!list_is_empty(self->buffers)) {
-            buffer_destroy(list_remove(self->buffers, 0));
-        }
-        self->buffer_idx = 0;
-    }
+    command_destroy(command);
 }
 
 static void display_command(const char *cmd) {
