@@ -234,10 +234,7 @@ static bool check_args(Editor *self, Command *command) {
     case NEXT:
     case CLEAN_WHITESPACE: expected_arg_ct = 1; break;
     case OPEN: expected_arg_ct = 2; break;
-    case EMPTY:
-        expected_arg_ct = 0;
-        /* do nothing */
-        break;
+    case EMPTY: expected_arg_ct = 0; break;
     case UNKNOWN: break;
     }
     if (cmd != UNKNOWN && command_arg_ct(command) != expected_arg_ct) {
@@ -270,7 +267,7 @@ static void run_command(Editor *self, const char *cmd) {
         case UNKNOWN:
             self->status_message_is_error = true;
             string_builder_set(self->status_message, "unrecognized command: ");
-            string_builder_append(self->status_message, cmd);
+            string_builder_append(self->status_message, command_get_arg(command, 0));
         }
     }
     command_destroy(command);
