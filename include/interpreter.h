@@ -15,7 +15,7 @@ char *interpreter_get_output(Interpreter *self);
 /**
  * True iff `self` is had an error.
  */
-bool interpreter_is_poisoned(Interpreter *self);
+bool *interpreter_is_poisoned_ref(Interpreter *self);
 
 /**
  * Run interpreter.

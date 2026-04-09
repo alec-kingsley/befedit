@@ -452,18 +452,23 @@ static void editor_load_config(Editor *self) {
         pthread_mutex_lock(&mutex);
         while (!finished) {
             ret = pthread_cond_timedwait(&cond, &mutex, &timeout);
-            if (ret == ETIMEDOUT) {
-                break;
-            } else if (ret != 0) {
-                report_system_error(FILENAME ": failed to wait");
-                exit(1);
+            if (ret != 0) {
+                /* stop the interpreter from running */
+                *(interpreter_is_poisoned_ref(interpreter)) = true;
+
+                if (ret == ETIMEDOUT) {
+                    break;
+                } else {
+                    report_system_error(FILENAME ": failed to wait");
+                    exit(1);
+                }
             }
         }
         pthread_mutex_unlock(&mutex);
 
         if (finished) {
             pthread_join(thread, NULL);
-            if (interpreter_is_poisoned(interpreter)) {
+            if (*(interpreter_is_poisoned_ref(interpreter))) {
                 self->status_message_is_error = true;
                 string_builder_set(self->status_message, "config error: ");
             } else {

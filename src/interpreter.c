@@ -505,14 +505,21 @@ static void absolute_delta(Interpreter *self) {
     self->ip->momentum.y = y;
 }
 
+/* to prevent overallocating in infinite loop */
+#define MAX_OUTPUT_LEN 256
+
 static void output_character(Interpreter *self) {
-    string_builder_append_char(self->output, funge_stack_pop(self->ip->stack));
+    if (string_builder_len(self->output) < MAX_OUTPUT_LEN) {
+        string_builder_append_char(self->output, funge_stack_pop(self->ip->stack));
+    }
 }
 
 static void output_integer(Interpreter *self) {
     char value[16];
-    sprintf(value, "%i ", funge_stack_pop(self->ip->stack));
-    string_builder_append(self->output, value);
+    if (string_builder_len(self->output) < MAX_OUTPUT_LEN) {
+        sprintf(value, "%i ", funge_stack_pop(self->ip->stack));
+        string_builder_append(self->output, value);
+    }
 }
 
 static void input_character(Interpreter *self) {
@@ -1216,8 +1223,8 @@ static void instruction_pointer_destroy(InstructionPointer *self) {
     }
 }
 
-bool interpreter_is_poisoned(Interpreter *self) {
-    return self->is_poisoned;
+bool *interpreter_is_poisoned_ref(Interpreter *self) {
+    return &self->is_poisoned;
 }
 
 char *interpreter_get_output(Interpreter *self) {
