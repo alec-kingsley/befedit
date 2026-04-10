@@ -1035,7 +1035,8 @@ void buffer_build_display(Buffer *self, StringBuilder *display,
         } else {
             contents_idx++;
         }
-        if (contents_char == '\t' || contents_char == '\n') {
+        if (contents_char == '\t' || contents_char == '\n'
+            || contents_char == '\r') {
             /* TODO - how should tabs be displayed? is this best way? */
             contents_char = ' ';
         } else if (!isprint(contents_char)) {
