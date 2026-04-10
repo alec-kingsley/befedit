@@ -156,11 +156,24 @@ In addition to characters, the following values may be used for special keys:
 For example, if you would like `ctrl-s` to save your current buffer, you could use the following
 config file:
 
+```
+"TDFB"4(  ;load befedit fingerprint; v
+v *93 ":w" a 0                       <
+  ^^^      ^
+    |      |
+    |      +--- enter
+    +-- esc
+
+> 'SC ; set to ctrl-s ; @
+ ```
+
+Or, more consisely:
+
 `"TDFB"4(0a"w:"39*'SC@`
 
 If `x` is not a letter, `C` will reflect. If `x` is 'J' or 'M', it will not reflect, however the
 macro will do nothing.
 
-x can be upper or lower case.
+`x` can be upper or lower case.
 
 
