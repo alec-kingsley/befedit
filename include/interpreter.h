@@ -3,6 +3,7 @@
 #define INTERPRETER_H
 
 #include <stdbool.h>
+#include "editor.h"
 
 typedef struct Interpreter Interpreter;
 
@@ -26,7 +27,7 @@ void interpreter_run(Interpreter *self);
  * Create a new interpreter.
  * Return NULL if error occured.
  */
-Interpreter *interpreter_create(const char *fname);
+Interpreter *interpreter_create(const char *fname, Editor *editor);
 
 /**
  * Destroy the interpreter.

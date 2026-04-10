@@ -123,10 +123,44 @@ if it's been unmodified since opening.
 
 The config file is written in Befunge-98 and located at `~/.config/befedit/config.b98`.
 
+At load time, the config file willl be interpreted and the output will be printed as a status
+message.
+
 If it takes > 2 sec to run the config program, it will give up.
 
-Currently, it will just print the result of the program as a status message.
-
 The Befunge-98 interpreter used is the [SBI interpreter](https://github.com/alec-kingsley/sbi),
-with handprint `0x534249`
+with handprint `0x534249`, with the following additional fingerprint:
+
+### `BFDT` fingerprint
+
+`C` - pops a letter (we'll call this `x`), then pops values until it reaches a 0.
+
+These values are saved as a keystroke, and `ctrl-{x}` will execute that keystroke.
+
+In addition to characters, the following values may be used for special keys:
+
+```
+27  - ESC
+127 - BACKSPACE
+256 - LEFT ARROW
+257 - RIGHT ARROW
+258 - UP ARROW
+259 - DOWN ARROW
+260 - DEL
+261 - HOME
+262 - END
+263 - PAGE UP
+264 - PAGE DOWN
+```
+
+For example, if you would like `ctrl-s` to save your current buffer, you could use the following
+config file:
+
+`"TDFB"4(0a"w:"39*'SC@`
+
+If `x` is not a letter, `C` will reflect. If `x` is 'J' or 'M', it will not reflect, however the
+macro will do nothing.
+
+x can be upper or lower case.
+
 

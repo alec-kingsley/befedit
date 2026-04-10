@@ -2,9 +2,16 @@
 #ifndef EDITOR_H
 #define EDITOR_H
 
+#include "keystroke.h"
 #include "buffer.h"
 
 typedef struct Editor Editor;
+
+/**
+ * Register a macro to be executed by `ctrl-{key}`
+ * Prereq - `key` is a capital letter.
+ */
+void editor_registor_macro(Editor *self, Keystroke *macro, key_t key);
 
 /**
  * Run editor.

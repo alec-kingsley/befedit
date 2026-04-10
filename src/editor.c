@@ -29,11 +29,52 @@ struct Editor {
     StringBuilder *status_message;
     bool status_message_is_error;
     char *config_path;
+    mode_t saved_mode; /* for command mode */
+    mode_t mode;
+
+    /* macro for ctrl keys A-Z */
+    Keystroke *macros[26];
+
+    StringBuilder *cmd;
 };
+
+void editor_registor_macro(Editor *self, Keystroke *macro, key_t key) {
+    const size_t i = key - 'A';
+    if (i >= 26) {
+        report_logic_error(FILENAME ": invalid macro");
+        exit(1);
+    }
+    if (self->macros[i]) {
+        keystroke_destroy(self->macros[i]);
+    }
+    self->macros[i] = macro;
+}
 
 static void reset_status_message(Editor *self) {
     string_builder_set(self->status_message, "");
     self->status_message_is_error = false;
+}
+
+static void build_command_footer(StringBuilder *display, Editor *self) {
+    uint16_t col;
+
+    /* fill empty footer */
+    move_cursor(display, get_row_ct() - 1, 0);
+    string_builder_append(display, HIGHLIGHT);
+    for (col = 0; col < get_col_ct(); col++) {
+        string_builder_append_char(display, ' ');
+    }
+
+    /* write mode */
+    move_cursor(display, get_row_ct() - 1, 0);
+    string_builder_append_char(display, ':');
+    for (col = 1; col < get_col_ct(); col++) {
+        if (string_builder_len(self->cmd) + 1 == col) break;
+        string_builder_append_char(display,
+                                   string_builder_get_char(self->cmd, col - 1));
+    }
+
+    string_builder_append(display, RESET);
 }
 
 static void build_footer(StringBuilder *display, mode_t mode,
@@ -95,7 +136,7 @@ static void build_status_message(StringBuilder *display,
     }
 }
 
-static void update_screen(Editor *self, mode_t mode) {
+static void update_screen(Editor *self) {
     const uint16_t top_offset = 0, left_offset = 0;
     uint16_t row_ct, col_ct;
     StringBuilder *display = string_builder_create();
@@ -104,15 +145,22 @@ static void update_screen(Editor *self, mode_t mode) {
 
     string_builder_append(display, CLEAR_SCREEN RESET_CURSOR SHOW_CURSOR);
 
-    build_footer(display, mode, buffer_get_momentum(self->buffer),
-                 buffer_get_row(self->buffer), buffer_get_col(self->buffer));
     build_status_message(display,
                          string_builder_to_string(self->status_message),
                          self->status_message_is_error);
-    string_builder_append(display, RESET);
 
-    buffer_build_display(self->buffer, display, top_offset, left_offset,
-                         row_ct - 2, col_ct);
+    /* display order changes due to differing cursor positions */
+    if (self->mode == COMMAND) {
+        buffer_build_display(self->buffer, display, top_offset, left_offset,
+                             row_ct - 2, col_ct);
+        build_command_footer(display, self);
+    } else {
+        build_footer(display, self->mode, buffer_get_momentum(self->buffer),
+                     buffer_get_row(self->buffer),
+                     buffer_get_col(self->buffer));
+        buffer_build_display(self->buffer, display, top_offset, left_offset,
+                             row_ct - 2, col_ct);
+    }
 
     string_builder_print(display);
     string_builder_destroy(display);
@@ -263,7 +311,8 @@ static void editor_config_open(Editor *self) {
     }
 }
 
-static void run_command(Editor *self, const char *cmd) {
+static void run_command(Editor *self) {
+    const char *cmd = string_builder_to_string(self->cmd);
     Command *command = command_create(cmd);
     if (!command) return;
     if (check_args(self, command)) {
@@ -292,63 +341,6 @@ static void run_command(Editor *self, const char *cmd) {
         }
     }
     command_destroy(command);
-}
-
-static void display_command(const char *cmd) {
-    uint16_t col;
-    StringBuilder *display = string_builder_create();
-
-    /* fill empty footer */
-    move_cursor(display, get_row_ct() - 1, 0);
-    string_builder_append(display, HIGHLIGHT);
-    for (col = 0; col < get_col_ct(); col++) {
-        string_builder_append_char(display, ' ');
-    }
-
-    /* write mode */
-    move_cursor(display, get_row_ct() - 1, 0);
-    string_builder_append_char(display, ':');
-    for (col = 1; col < get_col_ct(); col++) {
-        if (cmd[col - 1] == '\0') break;
-        string_builder_append_char(display, cmd[col - 1]);
-    }
-
-    string_builder_append(display, RESET);
-    string_builder_print(display);
-    string_builder_destroy(display);
-}
-
-static void command_mode(Editor *self) {
-    key_t key;
-    StringBuilder *cmd = string_builder_create();
-    bool keep_running = true;
-    bool run_cmd = true;
-    while (keep_running) {
-        update_screen(self, COMMAND);
-        display_command(string_builder_to_string(cmd));
-        key = get_key();
-        switch (key) {
-        case ESC_KEY:
-            run_cmd = false;
-            keep_running = false;
-            break;
-        case '\n': keep_running = false; break;
-        case BACKSPACE:
-            if (string_builder_len(cmd) != 0) {
-                string_builder_restrict(cmd, 0, -1);
-            }
-            break;
-        default:
-            if (key_is_printable(key)) {
-                string_builder_append_char(cmd, key);
-            }
-            break;
-        }
-    }
-    if (run_cmd) {
-        run_command(self, string_builder_to_string(cmd));
-    }
-    string_builder_destroy(cmd);
 }
 
 void editor_add_buffer(Editor *self, Buffer *buffer) {
@@ -431,7 +423,7 @@ static void editor_load_config(Editor *self) {
     int ret;
 
     if (check_config_exists(self)) {
-        interpreter = interpreter_create(self->config_path);
+        interpreter = interpreter_create(self->config_path, self);
         if (interpreter == NULL) exit(1);
 
         args.interpreter = interpreter;
@@ -454,6 +446,7 @@ static void editor_load_config(Editor *self) {
             ret = pthread_cond_timedwait(&cond, &mutex, &timeout);
             if (ret != 0) {
                 /* stop the interpreter from running */
+                /* TODO - is this guaranteed to stop it in time? */
                 *(interpreter_is_poisoned_ref(interpreter)) = true;
 
                 if (ret == ETIMEDOUT) {
@@ -489,10 +482,64 @@ static void editor_load_config(Editor *self) {
     pthread_cond_destroy(&cond);
 }
 
+/**
+ * Return `true` iff should keep running
+ */
+static bool editor_execute_key(Editor *self, key_t key) {
+    reset_status_message(self);
+    if (self->mode == COMMAND) {
+        switch (key) {
+        case ESC_KEY: self->mode = self->saved_mode; break;
+        case '\n':
+            self->mode = self->saved_mode;
+            run_command(self);
+            return !list_is_empty(self->buffers);
+        case BACKSPACE:
+            if (string_builder_len(self->cmd) != 0) {
+                string_builder_restrict(self->cmd, 0, -1);
+            }
+            break;
+        default:
+            if (key_is_printable(key)) {
+                string_builder_append_char(self->cmd, key);
+            }
+            break;
+        }
+        return true;
+    } else if (key == ':' && self->mode != INSERT) {
+        string_builder_set(self->cmd, "");
+        self->saved_mode = self->mode;
+        self->mode = COMMAND;
+        return !list_is_empty(self->buffers);
+    } else {
+
+        if ((key == 'i' || key == 'I' || key == 'a' || key == 'A')
+            && self->mode != INSERT) {
+            self->mode = INSERT;
+        } else if (key == ESC_KEY && self->mode != NORMAL) {
+            self->mode = NORMAL;
+        } else if (key == 'v' && self->mode == NORMAL) {
+            self->mode = SELECT;
+        }
+        buffer_cmd(self->buffer, key, false);
+        return true;
+    }
+}
+
+static bool editor_execute_keystroke(Editor *self, Keystroke *keystroke) {
+    size_t i;
+    bool keep_running = true;
+    for (i = 0; i < keystroke_len(keystroke) && keep_running; i++) {
+        keep_running
+            = editor_execute_key(self, keystroke_get_key(keystroke, i));
+    }
+    return keep_running;
+}
+
 void editor_run(Editor *self) {
     key_t key;
     bool keep_running = true;
-    mode_t mode = NORMAL;
+    Keystroke *macro;
     if (list_len(self->buffers) == 0) {
         self->buffer = buffer_create("");
         if (!self->buffer) goto editor_run_fail;
@@ -503,27 +550,23 @@ void editor_run(Editor *self) {
     enable_raw_mode();
 
     string_builder_set(self->status_message, "loading config...");
-    update_screen(self, mode);
+    update_screen(self);
 
     editor_load_config(self);
 
     while (keep_running) {
-        update_screen(self, mode);
+        update_screen(self);
         key = get_key();
-        reset_status_message(self);
-        if (key == ':' && mode != INSERT) {
-            command_mode(self);
-            keep_running = !list_is_empty(self->buffers);
-        } else {
-            if ((key == 'i' || key == 'I' || key == 'a' || key == 'A')
-                && mode != INSERT) {
-                mode = INSERT;
-            } else if (key == ESC_KEY && mode != NORMAL) {
-                mode = NORMAL;
-            } else if (key == 'v' && mode == NORMAL) {
-                mode = SELECT;
+        /* CTRL('J') and CTRL('M') are read as newline */
+        /* TODO - is there a way to differentiate CTRL('J'), CTRL('M') and
+         * newline? */
+        if (CTRL('A') <= key && key <= CTRL('Z') && key != '\n') {
+            macro = self->macros[key - CTRL('A')];
+            if (macro) {
+                keep_running = editor_execute_keystroke(self, macro);
             }
-            buffer_cmd(self->buffer, key, false);
+        } else {
+            keep_running = editor_execute_key(self, key);
         }
     }
 editor_run_fail:
@@ -531,17 +574,28 @@ editor_run_fail:
 }
 
 Editor *editor_create(void) {
+    size_t i;
     Editor *self = calloc(1, sizeof(Editor));
     if (!self) {
         report_system_error(FILENAME ": memory allocation failure");
         goto editor_create_fail;
     }
+
     self->buffers = list_create((void (*)(void *))buffer_destroy);
     if (!self->buffers) goto editor_create_fail;
+
     self->status_message = string_builder_create();
     if (!self->status_message) goto editor_create_fail;
 
+    self->cmd = string_builder_create();
+    if (!self->cmd) goto editor_create_fail;
+
     set_config_path(self);
+    self->mode = NORMAL;
+
+    for (i = 0; i < 26; i++) {
+        self->macros[i] = NULL;
+    }
 
     reset_status_message(self);
     self->buffer_idx = 0;
@@ -553,10 +607,15 @@ editor_create_fail:
 }
 
 void editor_destroy(Editor *self) {
+    size_t i;
     if (self) {
         list_destroy(self->buffers);
         string_builder_destroy(self->status_message);
         free(self->config_path);
+        for (i = 0; i < 26; i++) {
+            keystroke_destroy(self->macros[i]);
+        }
+        string_builder_destroy(self->cmd);
         free(self);
     }
 }

@@ -1,5 +1,7 @@
 #include "interpreter.h"
+#include "editor.h"
 #include "funge_stack.h"
+#include "keystroke.h"
 #include "queue.h"
 #include "reporter.h"
 #include "stack.h"
@@ -83,6 +85,9 @@ struct Interpreter {
 
     /* an error has been reported */
     bool is_poisoned;
+
+    /* not owned by `self`, just a reference */
+    Editor *editor;
 };
 
 static void execute_instruction(Interpreter *self, uint8_t instr);
@@ -99,6 +104,30 @@ static void interpreter_error(Interpreter *self, const char *error) {
  *  Fingerprint Definitions
  * =========================
  */
+
+static void bfdt_c(Interpreter *self) {
+    Keystroke *macro = keystroke_create();
+    funge_cell_t x = funge_stack_pop(self->ip->stack);
+    funge_cell_t key;
+
+    if ('a' <= x && x <= 'z') {
+        x = x - 'a' + 'A';
+    }
+
+    do {
+        key = funge_stack_pop(self->ip->stack);
+        if (key != 0) {
+            keystroke_append_key(macro, key);
+        }
+    } while (key != 0);
+
+    if (x < 'A' || x > 'Z') {
+        keystroke_destroy(macro);
+        reflect(self);
+    } else {
+        editor_registor_macro(self->editor, macro, x);
+    }
+}
 
 static void bool_a(Interpreter *self) {
     funge_cell_t a = funge_stack_pop(self->ip->stack);
@@ -155,6 +184,34 @@ static void roma_x(Interpreter *self) {
     (name[3] + name[2] * 0x100 + name[1] * 0x10000 + name[0] * 0x1000000)
 
 static const fingerprint_t FINGERPRINTS[] = {
+    {FINGERPRINT_ID("BFDT"),
+     {
+         NULL,   /* A */
+         NULL,   /* B */
+         bfdt_c, /* C */
+         NULL,   /* D */
+         NULL,   /* E */
+         NULL,   /* F */
+         NULL,   /* G */
+         NULL,   /* H */
+         NULL,   /* I */
+         NULL,   /* J */
+         NULL,   /* K */
+         NULL,   /* L */
+         NULL,   /* M */
+         NULL,   /* N */
+         NULL,   /* O */
+         NULL,   /* P */
+         NULL,   /* Q */
+         NULL,   /* R */
+         NULL,   /* S */
+         NULL,   /* T */
+         NULL,   /* U */
+         NULL,   /* V */
+         NULL,   /* W */
+         NULL,   /* X */
+         NULL    /* Y */
+     }},
     {FINGERPRINT_ID("BOOL"),
      {
          NULL,   /* A */
@@ -510,7 +567,8 @@ static void absolute_delta(Interpreter *self) {
 
 static void output_character(Interpreter *self) {
     if (string_builder_len(self->output) < MAX_OUTPUT_LEN) {
-        string_builder_append_char(self->output, funge_stack_pop(self->ip->stack));
+        string_builder_append_char(self->output,
+                                   funge_stack_pop(self->ip->stack));
     }
 }
 
@@ -1231,12 +1289,14 @@ char *interpreter_get_output(Interpreter *self) {
     return string_builder_to_string(self->output);
 }
 
-Interpreter *interpreter_create(const char *fname) {
+Interpreter *interpreter_create(const char *fname, Editor *editor) {
     Interpreter *self = calloc(1, sizeof(Interpreter));
     if (!self) {
         report_system_error(FILENAME ": memory allocation failure");
         goto interpreter_create_fail;
     }
+
+    self->editor = editor;
 
     self->is_poisoned = false;
 
