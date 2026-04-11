@@ -142,6 +142,50 @@ static void bool_x(Interpreter *self) {
     funge_stack_push(self->ip->stack, !!a ^ !!b);
 }
 
+static void modu_m(Interpreter *self) {
+    /* signed-result modulo */
+    funge_cell_t b = funge_stack_pop(self->ip->stack);
+    funge_cell_t a = funge_stack_pop(self->ip->stack);
+    funge_cell_t r;
+    if (b == 0) {
+        funge_stack_push(self->ip->stack, 0);
+    } else {
+        r = a % b;
+        if (r > 0 && b < 0) {
+            funge_stack_push(self->ip->stack, r + b);
+        } else {
+            funge_stack_push(self->ip->stack, r);
+        }
+    }
+}
+
+static void modu_u(Interpreter *self) {
+    /* Sam Holden's unsigned-result modulo */
+    /* Who is Sam Holden??? */
+    funge_cell_t b = funge_stack_pop(self->ip->stack);
+    funge_cell_t a = funge_stack_pop(self->ip->stack);
+    if (b == 0) {
+        funge_stack_push(self->ip->stack, 0);
+    } else {
+        if (a % b < 0) {
+            funge_stack_push(self->ip->stack, a % b + (b > 0 ? b : -b));
+        } else {
+            funge_stack_push(self->ip->stack, a % b);
+        }
+    }
+}
+
+static void modu_r(Interpreter *self) {
+    /* C-language integer remainder */
+    funge_cell_t b = funge_stack_pop(self->ip->stack);
+    funge_cell_t a = funge_stack_pop(self->ip->stack);
+    if (b == 0) {
+        funge_stack_push(self->ip->stack, 0);
+    } else {
+        funge_stack_push(self->ip->stack, a % b);
+    }
+}
+
 static void roma_c(Interpreter *self) {
     funge_stack_push(self->ip->stack, 100);
 }
@@ -257,6 +301,34 @@ static const fingerprint_t FINGERPRINTS[] = {
          reflect, /* W */
          reflect, /* X */
          reflect  /* Y */
+     }},
+    {FINGERPRINT_ID("MODU"),
+     {
+         NULL,   /* A */
+         NULL,   /* B */
+         NULL,   /* C */
+         NULL,   /* D */
+         NULL,   /* E */
+         NULL,   /* F */
+         NULL,   /* G */
+         NULL,   /* H */
+         NULL,   /* I */
+         NULL,   /* J */
+         NULL,   /* K */
+         NULL,   /* L */
+         modu_m, /* M */
+         NULL,   /* N */
+         NULL,   /* O */
+         NULL,   /* P */
+         NULL,   /* Q */
+         modu_r, /* R */
+         NULL,   /* S */
+         NULL,   /* T */
+         modu_u, /* U */
+         NULL,   /* V */
+         NULL,   /* W */
+         NULL,   /* X */
+         NULL    /* Y */
      }},
     {FINGERPRINT_ID("ROMA"),
      {
