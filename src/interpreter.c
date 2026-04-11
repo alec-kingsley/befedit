@@ -1,13 +1,14 @@
 #include "interpreter.h"
 #include "editor.h"
+#include "funge_space.h"
 #include "funge_stack.h"
-#include "keystroke.h"
 #include "queue.h"
 #include "reporter.h"
 #include "stack.h"
 #include "string_builder.h"
+#include "vector.h"
 #include <ctype.h>
-#include <stdint.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -28,16 +29,11 @@
 uint16_t g_next_ip_id = 0;
 
 typedef struct {
-    funge_cell_t value;
+    funge_cell_t id;
     /* functions for A through Z */
     /* NULL if not existant */
     void (*funcs[26])(Interpreter *self);
 } fingerprint_t;
-
-typedef struct {
-    int32_t x;
-    int32_t y;
-} vector_t;
 
 typedef struct {
     bool string_mode;
@@ -46,9 +42,6 @@ typedef struct {
     bool last_was_space;
 
     vector_t pos;
-
-    /* contents idx of start of row ip.y */
-    size_t y_contents_idx;
 
     vector_t momentum;
 
@@ -71,15 +64,12 @@ static InstructionPointer *instruction_pointer_clone(InstructionPointer *self);
 static void instruction_pointer_destroy(InstructionPointer *self);
 
 struct Interpreter {
-    StringBuilder *contents;
+    FungeSpace *funge_space;
 
     /* ips queue'd up to move into `self->ip` */
     Queue *other_ips;
 
     InstructionPointer *ip;
-
-    vector_t top_left;
-    vector_t bottom_right;
 
     StringBuilder *output;
 
@@ -90,7 +80,7 @@ struct Interpreter {
     Editor *editor;
 };
 
-static void execute_instruction(Interpreter *self, uint8_t instr);
+static void execute_instruction(Interpreter *self, funge_cell_t instr);
 
 static void reflect(Interpreter *self);
 
@@ -304,28 +294,6 @@ static const fingerprint_t FINGERPRINTS[] = {
  * ===========
  */
 
-static void update_ip_y_contents_idx(Interpreter *self, int32_t y_diff) {
-    while (y_diff > 0) {
-        while (string_builder_get_char(self->contents, self->ip->y_contents_idx)
-               != '\n') {
-            self->ip->y_contents_idx++;
-        }
-        self->ip->y_contents_idx++;
-        y_diff--;
-    }
-
-    while (y_diff < 0) {
-        self->ip->y_contents_idx--;
-        while (self->ip->y_contents_idx != 0
-               && string_builder_get_char(self->contents,
-                                          self->ip->y_contents_idx - 1)
-                      != '\n') {
-            self->ip->y_contents_idx--;
-        }
-        y_diff++;
-    }
-}
-
 /**
  * ============================================================
  *  Begin algorithm taken from cfunge in turn from Elliot Hird
@@ -349,11 +317,13 @@ static funge_cell_t wrap_frac_dir(funge_cell_t a, funge_cell_t r,
 
 static void wrap(Interpreter *self) {
     funge_cell_t m;
+    vector_t bottom_right = funge_space_bottom_right(self->funge_space);
+    vector_t top_left = funge_space_top_left(self->funge_space);
 #define FUNGESPACE_FY                                                          \
-    wrap_frac_dir(self->ip->pos.y, self->top_left.y, self->bottom_right.y,     \
+    wrap_frac_dir(self->ip->pos.y, top_left.y, bottom_right.y,                 \
                   self->ip->momentum.y)
 #define FUNGESPACE_FX                                                          \
-    wrap_frac_dir(self->ip->pos.x, self->top_left.x, self->bottom_right.x,     \
+    wrap_frac_dir(self->ip->pos.x, top_left.x, bottom_right.x,                 \
                   self->ip->momentum.x)
     if (self->ip->momentum.x == 0)
         m = FUNGESPACE_FY;
@@ -378,47 +348,23 @@ static void wrap(Interpreter *self) {
  */
 
 static void follow_momentum(Interpreter *self) {
-    const int32_t old_y = self->ip->pos.y;
+    vector_t bottom_right = funge_space_bottom_right(self->funge_space);
+    vector_t top_left = funge_space_top_left(self->funge_space);
 
     /* follow momentum */
     self->ip->pos.x += self->ip->momentum.x;
     self->ip->pos.y += self->ip->momentum.y;
 
-    if ((self->ip->pos.x > self->bottom_right.x)
-        || (self->ip->pos.x < self->top_left.x)
-
-        || (self->ip->pos.y > self->bottom_right.y)
-        || (self->ip->pos.y < self->top_left.y)) {
+    if ((self->ip->pos.x > bottom_right.x) || (self->ip->pos.x < top_left.x)
+        || (self->ip->pos.y > bottom_right.y)
+        || (self->ip->pos.y < top_left.y)) {
         wrap(self);
     }
-
-    update_ip_y_contents_idx(self, self->ip->pos.y - old_y);
 }
 
-static char next_instruction(Interpreter *self) {
-    uint8_t instr = ' ';
-    int32_t col;
-    size_t i;
+static funge_cell_t next_instruction(Interpreter *self) {
     follow_momentum(self);
-
-    col = self->top_left.x - 1;
-    i = self->ip->y_contents_idx;
-    while (col != self->ip->pos.x && instr != '\n'
-           && i < string_builder_len(self->contents)) {
-        col++;
-        instr = string_builder_get_char(self->contents, i);
-
-        /* form feed should be ignored */
-        if (instr == '\f') col--;
-
-        i++;
-    }
-
-    if (col != self->ip->pos.x || instr == '\n' || instr == '\r') {
-        instr = ' ';
-    }
-
-    return instr;
+    return funge_space_get(self->funge_space, self->ip->pos);
 }
 
 static void reflect(Interpreter *self) {
@@ -502,12 +448,12 @@ static void string_mode(Interpreter *self) {
 }
 
 static void fetch_character(Interpreter *self) {
-    uint8_t instr = next_instruction(self);
+    funge_cell_t instr = next_instruction(self);
     funge_stack_push(self->ip->stack, instr);
 }
 
 static void comment(Interpreter *self) {
-    uint8_t instr = ' ';
+    funge_cell_t instr = ' ';
     while (instr != ';') {
         instr = next_instruction(self);
     }
@@ -600,7 +546,6 @@ static void begin_block(Interpreter *self) {
     funge_cell_t n = funge_stack_pop(self->ip->stack);
     funge_cell_t i;
 
-    size_t preserved_ip_y_contents_idx = self->ip->y_contents_idx;
     vector_t preserved_ip_pos = self->ip->pos;
 
     for (i = 0; i < n; i++) {
@@ -624,7 +569,6 @@ static void begin_block(Interpreter *self) {
     self->ip->storage_offset.y = self->ip->pos.y;
 
     self->ip->pos = preserved_ip_pos;
-    self->ip->y_contents_idx = preserved_ip_y_contents_idx;
 }
 
 static void end_block(Interpreter *self) {
@@ -664,97 +608,17 @@ static void clear_stack(Interpreter *self) {
     }
 }
 
-static void add_column_left(Interpreter *self) {
-    size_t contents_idx = 0;
-    size_t contents_len = string_builder_len(self->contents) + 1;
-    char contents_char;
-    self->ip->y_contents_idx += self->ip->pos.y - self->top_left.y;
-    string_builder_insert_char(self->contents, 0, ' ');
-    while (contents_idx < contents_len) {
-        contents_char = string_builder_get_char(self->contents, contents_idx);
-        if (contents_char == '\n') {
-            string_builder_insert_char(self->contents, contents_idx + 1, ' ');
-            contents_idx++;
-            contents_len++;
-        }
-        contents_idx++;
-    }
-}
-
-/**
- * Get contents index. Adds additional 0's and newlines as needed to reach the
- * index.
- *
- * Prereq: (x, y) is within the boundary of self->top_left and
- * self->bottom_right.
- */
-static size_t get_contents_index(Interpreter *self, int32_t x, int32_t y) {
-    int32_t row = self->top_left.y;
-    int32_t col;
-    char c;
-    size_t i = 0;
-
-    for (row = self->top_left.y; row < y; row++) {
-        c = ' ';
-        while (c != '\n') {
-            if (i == string_builder_len(self->contents)) {
-                string_builder_append_char(self->contents, '\n');
-                c = '\n';
-            } else {
-                c = string_builder_get_char(self->contents, i);
-            }
-            i++;
-        }
-    }
-
-    for (col = self->top_left.x; col < x; col++) {
-        if (i == string_builder_len(self->contents)) {
-            string_builder_append_char(self->contents, '\n');
-            c = '\n';
-        } else {
-            c = string_builder_get_char(self->contents, i);
-        }
-        if (c != '\n') {
-            i++;
-        } else {
-            string_builder_insert_char(self->contents, i, ' ');
-            if (i < self->ip->y_contents_idx) {
-                self->ip->y_contents_idx++;
-            }
-        }
-    }
-    return i;
-}
-
 static void put(Interpreter *self) {
     funge_cell_t y
         = funge_stack_pop(self->ip->stack) + self->ip->storage_offset.y;
     funge_cell_t x
         = funge_stack_pop(self->ip->stack) + self->ip->storage_offset.x;
     funge_cell_t n = funge_stack_pop(self->ip->stack);
-    size_t contents_idx;
+    vector_t pos;
+    pos.x = x;
+    pos.y = y;
 
-    if (y > self->bottom_right.y) {
-        self->bottom_right.y = y;
-    } else {
-        while (y < self->top_left.y) {
-            self->top_left.y--;
-            string_builder_insert_char(self->contents, 0, '\n');
-            self->ip->y_contents_idx++;
-        }
-    }
-
-    if (x > self->bottom_right.x) {
-        self->bottom_right.x = x;
-    } else {
-        while (x < self->top_left.x) {
-            self->top_left.x--;
-            add_column_left(self);
-        }
-    }
-
-    contents_idx = get_contents_index(self, x, y);
-    string_builder_set_char(self->contents, contents_idx, n);
+    funge_space_put(self->funge_space, pos, n);
 }
 
 static void get(Interpreter *self) {
@@ -762,57 +626,24 @@ static void get(Interpreter *self) {
         = funge_stack_pop(self->ip->stack) + self->ip->storage_offset.y;
     funge_cell_t x
         = funge_stack_pop(self->ip->stack) + self->ip->storage_offset.x;
-    size_t contents_idx;
-    char c = '\0';
+    vector_t pos;
+    pos.x = x;
+    pos.y = y;
 
-    if (y <= self->bottom_right.y && y >= self->top_left.y
-        && x <= self->bottom_right.x && x >= self->top_left.x) {
-        contents_idx = get_contents_index(self, x, y);
-        c = string_builder_get_char(self->contents, contents_idx);
-    }
-
-    funge_stack_push(self->ip->stack, c);
+    funge_stack_push(self->ip->stack, funge_space_get(self->funge_space, pos));
 }
 
 static void store(Interpreter *self) {
-    funge_cell_t y;
-    funge_cell_t x;
     funge_cell_t n = funge_stack_pop(self->ip->stack);
-    size_t contents_idx;
-
     follow_momentum(self);
-    y = self->ip->pos.y;
-    x = self->ip->pos.x;
-
-    if (y > self->bottom_right.y) {
-        self->bottom_right.y = y;
-    } else {
-        while (y < self->top_left.y) {
-            self->top_left.y--;
-            add_column_left(self);
-        }
-    }
-
-    if (x > self->bottom_right.x) {
-        self->bottom_right.x = x;
-    } else {
-        while (x < self->top_left.x) {
-            self->top_left.x--;
-            string_builder_insert_char(self->contents, 0, '\n');
-            self->ip->y_contents_idx++;
-        }
-    }
-
-    contents_idx = get_contents_index(self, x, y);
-    string_builder_set_char(self->contents, contents_idx, n);
+    funge_space_put(self->funge_space, self->ip->pos, n);
 }
 
 static void iterate(Interpreter *self) {
     funge_cell_t n = funge_stack_pop(self->ip->stack);
     funge_cell_t i;
-    size_t preserved_ip_y_contents_idx = self->ip->y_contents_idx;
     vector_t preserved_ip_pos = self->ip->pos;
-    uint8_t instr;
+    funge_cell_t instr;
 
     do {
         instr = next_instruction(self);
@@ -820,7 +651,6 @@ static void iterate(Interpreter *self) {
 
     if (n > 0) {
         self->ip->pos = preserved_ip_pos;
-        self->ip->y_contents_idx = preserved_ip_y_contents_idx;
         for (i = 0; i < n; i++) {
             execute_instruction(self, instr);
         }
@@ -869,6 +699,8 @@ static void sys_info(Interpreter *self) {
     size_t i;
     size_t original_stack_size = funge_stack_size(self->ip->stack);
     funge_cell_t cell;
+    vector_t bottom_right = funge_space_bottom_right(self->funge_space);
+    vector_t top_left = funge_space_top_left(self->funge_space);
 
     /* TODO - environment variables */
     funge_stack_push(self->ip->stack, '\0');
@@ -896,17 +728,14 @@ static void sys_info(Interpreter *self) {
     funge_stack_push(self->ip->stack,
                      now.tm_year * 0x10000 + now.tm_mon * 0x100 + now.tm_mday);
 
-    /* "greatest point that contains non-space" */
-    funge_stack_push(self->ip->stack, self->bottom_right.x);
+    /* maximum x and y for which there exist non-space characters, relative to
+     * minimums */
+    funge_stack_push(self->ip->stack, bottom_right.x - top_left.x);
+    funge_stack_push(self->ip->stack, bottom_right.y - top_left.y);
 
-    funge_stack_push(self->ip->stack, self->bottom_right.y);
-
-    /* "least point that contains non-space" */
-    /* TODO - interpret this. What if (0, 1) and (1, 0) have non-space, but
-     * (0, 0) does? */
-    funge_stack_push(self->ip->stack, self->top_left.x);
-
-    funge_stack_push(self->ip->stack, self->top_left.y);
+    /* minimum x and y for which there exist non-space characters */
+    funge_stack_push(self->ip->stack, top_left.x);
+    funge_stack_push(self->ip->stack, top_left.y);
 
     /* storage offset */
     funge_stack_push(self->ip->stack, self->ip->storage_offset.x);
@@ -964,34 +793,46 @@ static void sys_info(Interpreter *self) {
     }
 }
 
+typedef struct {
+    fingerprint_t unwrap;
+    bool is_some;
+} option_fingerprint_t;
+
+static option_fingerprint_t find_fingerprint(funge_cell_t id) {
+    size_t i;
+    option_fingerprint_t fingerprint;
+    fingerprint.is_some = false;
+    for (i = 0; i < sizeof(FINGERPRINTS) / sizeof(FINGERPRINTS[0])
+                && !fingerprint.is_some;
+         i++) {
+        if (FINGERPRINTS[i].id == id) {
+            fingerprint.unwrap = FINGERPRINTS[i];
+            fingerprint.is_some = true;
+        }
+    }
+    return fingerprint;
+}
+
 static void load_semantics(Interpreter *self) {
     funge_cell_t n = funge_stack_pop(self->ip->stack);
-    funge_cell_t value = 0;
-    fingerprint_t fingerprint;
-    bool fingerprint_found = false;
+    funge_cell_t id = 0;
+    option_fingerprint_t fingerprint;
     void *func;
     size_t i;
     while (n > 0) {
-        value *= 0x100;
-        value += funge_stack_pop(self->ip->stack);
+        id *= 0x100;
+        id += funge_stack_pop(self->ip->stack);
         n--;
     }
-    for (i = 0; i < sizeof(FINGERPRINTS) / sizeof(FINGERPRINTS[0])
-                && !fingerprint_found;
-         i++) {
-        if (FINGERPRINTS[i].value == value) {
-            fingerprint = FINGERPRINTS[i];
-            fingerprint_found = true;
-        }
-    }
-    if (fingerprint_found) {
-        funge_stack_push(self->ip->stack, FINGERPRINT_ID("NULL"));
+    fingerprint = find_fingerprint(id);
+    if (fingerprint.is_some) {
+        funge_stack_push(self->ip->stack, id);
         for (i = 0; i < 26; i++) {
-            if (fingerprint.funcs[i] != NULL) {
+            if (fingerprint.unwrap.funcs[i] != NULL) {
                 /* hacky trick to shut up compiler about converting function
                  * pointers */
                 /* TODO - is this actually dangerous? */
-                memcpy(&func, &fingerprint.funcs[i], sizeof(func));
+                memcpy(&func, &fingerprint.unwrap.funcs[i], sizeof(func));
                 stack_push(self->ip->semantics[i], func);
             }
         }
@@ -1002,9 +843,27 @@ static void load_semantics(Interpreter *self) {
 }
 
 static void unload_semantics(Interpreter *self) {
-    funge_stack_pop(self->ip->stack);
-    /* TODO - actually unload semantic */
-    reflect(self);
+    funge_cell_t n = funge_stack_pop(self->ip->stack);
+    funge_cell_t id = 0;
+    option_fingerprint_t fingerprint;
+    size_t i;
+    while (n > 0) {
+        id *= 0x100;
+        id += funge_stack_pop(self->ip->stack);
+        n--;
+    }
+    fingerprint = find_fingerprint(id);
+    if (fingerprint.is_some) {
+        for (i = 0; i < 26; i++) {
+            if (fingerprint.unwrap.funcs[i] != NULL) {
+                if (!stack_is_empty(self->ip->semantics[i])) {
+                    stack_pop(self->ip->semantics[i]);
+                }
+            }
+        }
+    } else {
+        reflect(self);
+    }
 }
 
 static void quit(Interpreter *self) {
@@ -1019,7 +878,8 @@ static void split(Interpreter *self) {
     queue_enqueue(self->other_ips, new);
 }
 
-static void execute_string_mode_instruction(Interpreter *self, uint8_t instr) {
+static void execute_string_mode_instruction(Interpreter *self,
+                                            funge_cell_t instr) {
     if (instr == ' ') {
         if (self->ip->last_was_space) {
             while (instr == ' ') {
@@ -1039,7 +899,7 @@ static void execute_string_mode_instruction(Interpreter *self, uint8_t instr) {
     }
 }
 
-static void execute_instruction(Interpreter *self, uint8_t instr) {
+static void execute_instruction(Interpreter *self, funge_cell_t instr) {
     /** ---- TODO ----
      * = - execute
      * i - input file
@@ -1056,12 +916,16 @@ static void execute_instruction(Interpreter *self, uint8_t instr) {
         funge_stack_push(self->ip->stack, 10 + instr - 'a');
     } else if ('A' <= instr && instr <= 'Z') {
         if (self->ip->semantics[instr - 'A']) {
-            /* hacky trick to shut up compiler about converting function
-             * pointers */
-            /* TODO - is this actually dangerous? */
-            void_func = stack_peek(self->ip->semantics[instr - 'A']);
-            memcpy(&func, &void_func, sizeof(func));
-            func(self);
+            if (stack_is_empty(self->ip->semantics[instr - 'A'])) {
+                reflect(self);
+            } else {
+                /* hacky trick to shut up compiler about converting function
+                 * pointers */
+                /* TODO - is this actually dangerous? */
+                void_func = stack_peek(self->ip->semantics[instr - 'A']);
+                memcpy(&func, &void_func, sizeof(func));
+                func(self);
+            }
         }
     } else {
         switch (instr) {
@@ -1117,10 +981,9 @@ static void execute_instruction(Interpreter *self, uint8_t instr) {
 }
 
 void interpreter_run(Interpreter *self) {
-    uint8_t instr;
-    if (self->is_poisoned) return;
-    instr = string_builder_get_char(self->contents, 0);
+    funge_cell_t instr = funge_space_get(self->funge_space, self->ip->pos);
     while (!self->is_poisoned) {
+        /*printf(ORANGE "[%c]" RESET, instr);*/
         if (instr == '@' && !self->ip->string_mode) {
             if (queue_is_empty(self->other_ips)) {
                 break;
@@ -1149,46 +1012,6 @@ void interpreter_run(Interpreter *self) {
 
 #define CHUNK_SIZE 128
 
-/**
- * Initialize contents. Return `false` iff successful.
- */
-static bool init_contents(Interpreter *self, const char *fname) {
-    FILE *file = fopen(fname, "r");
-    char chunk[CHUNK_SIZE];
-    size_t n;
-
-    if (file) {
-        do {
-            n = fread(chunk, sizeof(char), CHUNK_SIZE, file);
-            string_builder_append_bytes(self->contents, chunk, n);
-        } while (n == CHUNK_SIZE);
-        fclose(file);
-    }
-    return !!file;
-}
-
-static void init_corners(Interpreter *self) {
-    int32_t col = 0;
-    int32_t i;
-    char c;
-    self->top_left.x = 0;
-    self->top_left.y = 0;
-    self->bottom_right.x = 0;
-    self->bottom_right.y = 0;
-    for (i = 0; (size_t)i < string_builder_len(self->contents); i++) {
-        c = string_builder_get_char(self->contents, i);
-        if (c == '\n') {
-            self->bottom_right.y++;
-            col = 0;
-        } else {
-            if (col > self->bottom_right.x) {
-                self->bottom_right.x = col;
-            }
-            col++;
-        }
-    }
-}
-
 static InstructionPointer *instruction_pointer_clone(InstructionPointer *self) {
     InstructionPointer *new = calloc(1, sizeof(InstructionPointer));
     FungeStack *new_funge_stack, *original_funge_stack;
@@ -1200,7 +1023,6 @@ static InstructionPointer *instruction_pointer_clone(InstructionPointer *self) {
 
     new->pos.x = self->pos.x;
     new->pos.y = self->pos.y;
-    new->y_contents_idx = self->y_contents_idx;
     new->momentum.x = self->momentum.x;
     new->momentum.y = self->momentum.y;
 
@@ -1244,7 +1066,6 @@ static InstructionPointer *instruction_pointer_create(void) {
 
     self->pos.x = 0;
     self->pos.y = 0;
-    self->y_contents_idx = 0;
     self->momentum.x = 1;
     self->momentum.y = 0;
 
@@ -1297,31 +1118,20 @@ Interpreter *interpreter_create(const char *fname, Editor *editor) {
     }
 
     self->editor = editor;
-
     self->is_poisoned = false;
 
-    self->contents = string_builder_create();
-    if (!self->contents) goto interpreter_create_fail;
+    self->funge_space = funge_space_create(fname);
+    if (!self->funge_space) goto interpreter_create_fail;
 
     self->output = string_builder_create();
     if (!self->output) goto interpreter_create_fail;
 
-    if (!init_contents(self, fname)) {
-        interpreter_error(self, "file not found or unreadable");
-    } else if (string_builder_len(self->contents) == 0) {
-        interpreter_error(self, "empty file");
-    }
+    self->other_ips
+        = queue_create((void (*)(void *))instruction_pointer_destroy);
+    if (!self->other_ips) goto interpreter_create_fail;
 
-    if (!self->is_poisoned) {
-        self->other_ips
-            = queue_create((void (*)(void *))instruction_pointer_destroy);
-        if (!self->other_ips) goto interpreter_create_fail;
-
-        self->ip = instruction_pointer_create();
-        if (!self->ip) goto interpreter_create_fail;
-
-        init_corners(self);
-    }
+    self->ip = instruction_pointer_create();
+    if (!self->ip) goto interpreter_create_fail;
 
     return self;
 interpreter_create_fail:
@@ -1331,10 +1141,10 @@ interpreter_create_fail:
 
 void interpreter_destroy(Interpreter *self) {
     if (self) {
-        string_builder_destroy(self->contents);
-        string_builder_destroy(self->output);
+        funge_space_destroy(self->funge_space);
         queue_destroy(self->other_ips);
         instruction_pointer_destroy(self->ip);
+        string_builder_destroy(self->output);
         free(self);
     }
 }

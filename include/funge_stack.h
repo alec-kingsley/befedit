@@ -2,13 +2,11 @@
 #ifndef FUNGE_STACK_H
 #define FUNGE_STACK_H
 
+#include "funge_cell.h"
 #include <stdbool.h>
-#include <stdint.h>
 #include <stdlib.h>
 
 typedef struct FungeStack FungeStack;
-
-typedef int32_t funge_cell_t;
 
 /**
  * Pop cell from funge stack.

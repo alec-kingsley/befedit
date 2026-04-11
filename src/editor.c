@@ -424,7 +424,14 @@ static void editor_load_config(Editor *self) {
 
     if (check_config_exists(self)) {
         interpreter = interpreter_create(self->config_path, self);
-        if (interpreter == NULL) exit(1);
+        if (interpreter == NULL) {
+            self->status_message_is_error = true;
+            string_builder_set(self->status_message, "config error: failed to load ");
+            string_builder_append(self->status_message, self->config_path);
+            pthread_mutex_destroy(&mutex);
+            pthread_cond_destroy(&cond);
+            return;
+        }
 
         args.interpreter = interpreter;
         args.mutex = &mutex;
