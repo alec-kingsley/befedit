@@ -86,9 +86,9 @@ static void shrink_funge_corners_to_fit(FungeSpace *self) {
     vector_t new_top_left = {INT32_MAX, INT32_MAX};
     vector_t new_bottom_right = {INT32_MIN, INT32_MIN};
     vector_t pos;
-    for (pos.y = self->funge_top_left.y; pos.y < self->funge_bottom_right.y;
+    for (pos.y = self->funge_top_left.y; pos.y <= self->funge_bottom_right.y;
          pos.y++) {
-        for (pos.x = self->funge_top_left.x; pos.x < self->funge_bottom_right.x;
+        for (pos.x = self->funge_top_left.x; pos.x <= self->funge_bottom_right.x;
              pos.x++) {
             c = funge_space_get(self, pos);
             if (c != ' ') {
