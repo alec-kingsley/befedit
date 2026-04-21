@@ -4,6 +4,7 @@
 
 #include "direction.h"
 #include "keystroke.h"
+#include "vector.h"
 #include <stdint.h>
 
 typedef struct Action Action;
@@ -14,24 +15,15 @@ typedef struct Action Action;
 Keystroke *action_get_keystroke(Action *self);
 
 /**
- * Get row.
+ * Get pos.
  */
-int32_t action_get_row(Action *self);
+vector_t action_get_pos(Action *self);
 
 /**
- * Set row.
+ * Set pos.
+ * Action does NOT own `pos`.
  */
-void action_set_row(Action *self, int32_t row);
-
-/**
- * Get column.
- */
-int32_t action_get_col(Action *self);
-
-/**
- * Set column.
- */
-void action_set_col(Action *self, int32_t col);
+void action_set_pos(Action *self, vector_t *pos);
 
 /**
  * Get momentum.
@@ -45,9 +37,11 @@ direction_t action_get_momentum(Action *self);
  * Ownership of `keystroke` is passed to Action, and Action should be
  * expected to destroy it at `action_destroy`
  *
- * `row` and `column` can be negative in the case of being off-screen.
+ * Action does NOT own `pos`.
+ *
+ * `pos.y` and `pos.x` can be negative in the case of being off-screen.
  */
-Action *action_create(Keystroke *keystroke, int32_t row, int32_t col,
+Action *action_create(Keystroke *keystroke, vector_t *pos,
                       direction_t momentum);
 
 /**

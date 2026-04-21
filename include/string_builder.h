@@ -80,6 +80,11 @@ bool string_builder_append_bytes(StringBuilder *self, const char *other, size_t 
 void string_builder_restrict(StringBuilder *self, size_t start, int32_t end);
 
 /**
+ * Remove a character from `self`.
+ */
+void string_builder_remove_char(StringBuilder *self, size_t index);
+
+/**
  * Remove a character range from `self`.
  * Includes `start` not `end`.
  */

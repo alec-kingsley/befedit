@@ -21,7 +21,7 @@ bool *interpreter_is_poisoned_ref(Interpreter *self);
 /**
  * Run interpreter.
  */
-void interpreter_run(Interpreter *self);
+int interpreter_run(Interpreter *self);
 
 /**
  * Create a new interpreter.

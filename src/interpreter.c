@@ -71,6 +71,8 @@ struct Interpreter {
 
     InstructionPointer *ip;
 
+    int return_code;
+
     StringBuilder *output;
 
     /* an error has been reported */
@@ -939,8 +941,9 @@ static void unload_semantics(Interpreter *self) {
 }
 
 static void quit(Interpreter *self) {
-    /* TODO - exit cleanly */
-    exit(funge_stack_pop(self->ip->stack));
+    /* NOTE - doesn't actually cause exit */
+    /* interpreter has to handle that specifically */
+    self->return_code = funge_stack_pop(self->ip->stack);
 }
 
 static void split(Interpreter *self) {
@@ -1052,7 +1055,7 @@ static void execute_instruction(Interpreter *self, funge_cell_t instr) {
     }
 }
 
-void interpreter_run(Interpreter *self) {
+int interpreter_run(Interpreter *self) {
     funge_cell_t instr = funge_space_get(self->funge_space, self->ip->pos);
     while (!self->is_poisoned) {
         /*printf(ORANGE "[%c]" RESET, instr);*/
@@ -1078,8 +1081,10 @@ void interpreter_run(Interpreter *self) {
                 }
             }
         }
+        if (instr == 'q' && !self->ip->string_mode) break;
         instr = next_instruction(self);
     }
+    return self->return_code;
 }
 
 #define CHUNK_SIZE 128
@@ -1204,6 +1209,8 @@ Interpreter *interpreter_create(const char *fname, Editor *editor) {
 
     self->ip = instruction_pointer_create();
     if (!self->ip) goto interpreter_create_fail;
+
+    self->return_code = 0;
 
     return self;
 interpreter_create_fail:

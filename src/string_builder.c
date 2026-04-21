@@ -125,7 +125,8 @@ bool string_builder_append(StringBuilder *self, const char *other) {
     return true;
 }
 
-bool string_builder_append_bytes(StringBuilder *self, const char *other, size_t n) {
+bool string_builder_append_bytes(StringBuilder *self, const char *other,
+                                 size_t n) {
     const size_t new_size = (self->len + n) * sizeof(char);
     while (self->size < new_size) {
         if (!expand(self)) {
@@ -142,6 +143,16 @@ void string_builder_restrict(StringBuilder *self, size_t start, int32_t end) {
     const size_t new_len = end_pos - start;
     memmove(self->val, self->val + start, new_len * sizeof(char));
     self->len = new_len;
+}
+
+void string_builder_remove_char(StringBuilder *self, size_t index) {
+    if (index > self->len) {
+        report_logic_error(FILENAME
+                           ": attempt to remove past end of string builder");
+    }
+
+    memmove(self->val + index, self->val + index + 1, self->len - index - 1);
+    self->len--;
 }
 
 void string_builder_remove_range(StringBuilder *self, size_t start,

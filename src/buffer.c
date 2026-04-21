@@ -1,5 +1,6 @@
 #include "buffer.h"
 #include "action.h"
+#include "buffer_space.h"
 #include "colors.h"
 #include "direction.h"
 #include "keystroke.h"
@@ -7,6 +8,7 @@
 #include "stack.h"
 #include "string_builder.h"
 #include "terminal.h"
+#include "vector.h"
 #include <ctype.h>
 #include <stdio.h>
 #include <string.h>
@@ -37,79 +39,64 @@ static option_direction_t read_direction(key_t key) {
 }
 
 struct Buffer {
-    bool new_file;
     char *filename;
-    StringBuilder *contents;
+
+    BufferSpace *contents;
+
     /* direction cursor should move in insert mode */
     direction_t momentum;
-    size_t cursor_row;
-    size_t cursor_col;
+    vector_t cursor_pos;
+
     /* # of rows on the top of the screen hidden */
     uint16_t top_offset;
-    size_t top_row_contents_idx;
     size_t rows_past_end;
+
     /* # of columns on the left of the screen hidden */
     uint16_t left_offset;
     bool is_modified;
 
     Stack *redo_stack; /* Stack<Action> */
     Stack *undo_stack; /* Stack<Action> */
+
     /* index within stacks to redo after an undo */
     size_t stack_idx;
 
     bool is_recording;
     Keystroke *current_redo_keystroke;
     Keystroke *current_undo_keystroke;
-    uint16_t current_action_row;
-    uint16_t current_action_col;
+    vector_t *current_action_pos;
     uint16_t current_action_momentum;
 
     /* position of start of insert mode, used for <enter> */
-    uint16_t insert_start_row;
-    uint16_t insert_start_col;
+    vector_t insert_start_pos;
 
     mode_t mode;
     bool is_replacing; /* for insert mode but just one char */
 
-    size_t selection_start_row;
-    size_t selection_start_col;
+    vector_t selection_start_pos;
 
     Keystroke *yanked;
 };
-
-/**
- * Get contents index of first character of a row.
- */
-static size_t get_row_contents_idx(Buffer *self, size_t row) {
-    size_t contents_idx;
-    size_t current_row = 0;
-    const size_t contents_len = string_builder_len(self->contents);
-    for (contents_idx = 0; contents_idx < contents_len && current_row != row;
-         contents_idx++) {
-        if (string_builder_get_char(self->contents, contents_idx) == '\n') {
-            current_row++;
-        }
-    }
-    return contents_idx;
-}
 
 static void begin_recording_action(Buffer *self) {
     self->is_recording = true;
     self->current_redo_keystroke = keystroke_create();
     self->current_undo_keystroke = keystroke_create();
-    self->current_action_row = self->cursor_row;
-    self->current_action_col = self->cursor_col;
+    self->current_action_pos
+        = buffer_space_get_coordinate(self->contents, self->cursor_pos);
     self->current_action_momentum = self->momentum;
 }
 
 static void push_current_action(Buffer *self) {
-    const Action *redo_action = action_create(
-        self->current_redo_keystroke, self->current_action_row,
-        self->current_action_col, self->current_action_momentum);
+    vector_t *undo_action_pos
+        = buffer_space_get_coordinate(self->contents, self->cursor_pos);
+    const Action *redo_action
+        = action_create(self->current_redo_keystroke, self->current_action_pos,
+                        self->current_action_momentum);
 
     const Action *undo_action
-        = action_create(self->current_undo_keystroke, self->cursor_row,
-                        self->cursor_col, reverse_direction(self->momentum));
+        = action_create(self->current_undo_keystroke, undo_action_pos,
+                        reverse_direction(self->momentum));
 
     while (self->stack_idx > 0) {
         action_destroy(stack_pop(self->redo_stack));
@@ -130,17 +117,17 @@ static void push_current_action(Buffer *self) {
 static void follow_direction(Buffer *self, direction_t direction) {
     switch (direction) {
     case LEFT:
-        if (self->cursor_col > 0) {
-            self->cursor_col--;
+        if (self->cursor_pos.x > 0) {
+            self->cursor_pos.x--;
         }
         break;
-    case DOWN: self->cursor_row++; break;
+    case DOWN: self->cursor_pos.y++; break;
     case UP:
-        if (self->cursor_row > 0) {
-            self->cursor_row--;
+        if (self->cursor_pos.y > 0) {
+            self->cursor_pos.y--;
         }
         break;
-    case RIGHT: self->cursor_col++; break;
+    case RIGHT: self->cursor_pos.x++; break;
     }
 }
 
@@ -148,135 +135,33 @@ static void follow_momentum(Buffer *self) {
     follow_direction(self, self->momentum);
 }
 
-/**
- * Add 1 to all rows greater than or equal to `row`.
- */
-static void insert_action_row(Buffer *self, int32_t row) {
-    size_t i;
-    Action *undo_action, *redo_action;
-    int32_t undo_row, redo_row;
-    for (i = 0; i < stack_len(self->undo_stack); i++) {
-        undo_action = stack_get(self->undo_stack, i);
-        redo_action = stack_get(self->redo_stack, i);
-        undo_row = action_get_row(undo_action);
-        redo_row = action_get_row(redo_action);
-        if (undo_row >= row) {
-            action_set_row(undo_action, undo_row + 1);
-        }
-        if (redo_row >= row) {
-            action_set_row(redo_action, redo_row + 1);
-        }
-    }
-}
-
-/**
- * Add 1 to all columns greater than or equal to `col`.
- */
-static void insert_action_col(Buffer *self, int32_t col) {
-    size_t i;
-    Action *undo_action, *redo_action;
-    int32_t undo_col, redo_col;
-    for (i = 0; i < stack_len(self->undo_stack); i++) {
-        undo_action = stack_get(self->undo_stack, i);
-        redo_action = stack_get(self->redo_stack, i);
-        undo_col = action_get_col(undo_action);
-        redo_col = action_get_col(redo_action);
-        if (undo_col >= col) {
-            action_set_col(undo_action, undo_col + 1);
-        }
-        if (redo_col >= col) {
-            action_set_col(redo_action, redo_col + 1);
-        }
-    }
-}
-
-/**
- * Remove 1 from all rows greater than or equal to `row`.
- */
-static void remove_action_row(Buffer *self, int32_t row) {
-    size_t i;
-    Action *undo_action, *redo_action;
-    int32_t undo_row, redo_row;
-    for (i = 0; i < stack_len(self->undo_stack); i++) {
-        undo_action = stack_get(self->undo_stack, i);
-        redo_action = stack_get(self->redo_stack, i);
-        undo_row = action_get_row(undo_action);
-        redo_row = action_get_row(redo_action);
-        if (undo_row >= row) {
-            action_set_row(undo_action, undo_row - 1);
-        }
-        if (redo_row >= row) {
-            action_set_row(redo_action, redo_row - 1);
-        }
-    }
-}
-
-/**
- * Remove 1 from all columns greater than or equal to `col`.
- */
-static void remove_action_col(Buffer *self, int32_t col) {
-    size_t i;
-    Action *undo_action, *redo_action;
-    int32_t undo_col, redo_col;
-    for (i = 0; i < stack_len(self->undo_stack); i++) {
-        undo_action = stack_get(self->undo_stack, i);
-        redo_action = stack_get(self->redo_stack, i);
-        undo_col = action_get_col(undo_action);
-        redo_col = action_get_col(redo_action);
-        if (undo_col >= col) {
-            action_set_col(undo_action, undo_col - 1);
-        }
-        if (redo_col >= col) {
-            action_set_col(redo_action, redo_col - 1);
-        }
-    }
-}
-
 static void add_row_top(Buffer *self) {
     /* int32_min so it's not between actions */
-    insert_action_row(self, INT32_MIN);
-    string_builder_insert(self->contents, 0, "\n");
+    buffer_space_insert_row(self->contents, 0);
 }
 
 static void add_column_left(Buffer *self) {
-    size_t contents_idx = 0;
-    size_t contents_len = string_builder_len(self->contents) + 1;
-    char contents_char;
-    /* int32_min so it's not between actions */
-    insert_action_col(self, INT32_MIN);
-    self->top_row_contents_idx += self->top_offset;
-    string_builder_insert(self->contents, 0, " ");
-    while (contents_idx < contents_len) {
-        contents_char = string_builder_get_char(self->contents, contents_idx);
-        if (contents_char == '\n') {
-            string_builder_insert(self->contents, contents_idx + 1, " ");
-            contents_idx++;
-            contents_len++;
-        }
-        contents_idx++;
-    }
+    buffer_space_insert_col(self->contents, 0);
 }
 
 static void force_follow_direction(Buffer *self, direction_t direction) {
     switch (direction) {
     case LEFT:
-        if (self->cursor_col > 0) {
-            self->cursor_col--;
+        if (self->cursor_pos.x > 0) {
+            self->cursor_pos.x--;
         } else {
-            self->current_action_col++;
             add_column_left(self);
         }
         break;
-    case DOWN: self->cursor_row++; break;
+    case DOWN: self->cursor_pos.y++; break;
     case UP:
-        if (self->cursor_row > 0) {
-            self->cursor_row--;
+        if (self->cursor_pos.y > 0) {
+            self->cursor_pos.y--;
         } else {
-            self->current_action_row++;
             add_row_top(self);
         }
         break;
-    case RIGHT: self->cursor_col++; break;
+    case RIGHT: self->cursor_pos.x++; break;
     }
 }
 
@@ -347,16 +232,16 @@ static void buffer_insert_enter(Buffer *self) {
     while (keep_following) {
         switch (forwards) {
         case UP:
-            keep_following = (self->cursor_row < self->insert_start_row);
+            keep_following = (self->cursor_pos.y < self->insert_start_pos.y);
             break;
         case DOWN:
-            keep_following = (self->cursor_row > self->insert_start_row);
+            keep_following = (self->cursor_pos.y > self->insert_start_pos.y);
             break;
         case LEFT:
-            keep_following = (self->cursor_col < self->insert_start_col);
+            keep_following = (self->cursor_pos.x < self->insert_start_pos.x);
             break;
         case RIGHT:
-            keep_following = (self->cursor_col > self->insert_start_col);
+            keep_following = (self->cursor_pos.x > self->insert_start_pos.x);
             break;
         default: report_logic_error(FILENAME ": unknown direction"); exit(1);
         }
@@ -368,9 +253,6 @@ static void buffer_insert_enter(Buffer *self) {
 }
 
 static void buffer_insert_cmd(Buffer *self, key_t cmd) {
-    uint16_t row = self->top_offset, col = 0;
-    size_t contents_idx = self->top_row_contents_idx;
-    size_t contents_len = string_builder_len(self->contents);
     option_direction_t direction;
     if (self->is_recording) {
         keystroke_append_key(self->current_redo_keystroke, cmd);
@@ -402,35 +284,7 @@ static void buffer_insert_cmd(Buffer *self, key_t cmd) {
         return;
     }
     self->is_modified = true;
-    while (row < self->cursor_row) {
-        if (contents_idx == contents_len) {
-            string_builder_append_char(self->contents, '\n');
-            contents_len++;
-            row++;
-        } else if (string_builder_get_char(self->contents, contents_idx)
-                   == '\n') {
-            row++;
-        }
-        contents_idx++;
-    }
-    while (col < self->cursor_col) {
-        if (contents_idx == contents_len) {
-            string_builder_append_char(self->contents, ' ');
-            contents_len++;
-        } else if (string_builder_get_char(self->contents, contents_idx)
-                   == '\n') {
-            string_builder_insert(self->contents, contents_idx, " ");
-            contents_len++;
-        }
-        col++;
-        contents_idx++;
-    }
 
-    if (contents_idx == contents_len
-        || string_builder_get_char(self->contents, contents_idx) == '\n') {
-        string_builder_insert(self->contents, contents_idx, " ");
-        contents_len++;
-    }
     if (cmd == BACKSPACE) {
         if (self->is_recording) {
             prepend_undo_direction(self, reverse_direction(self->momentum));
@@ -438,19 +292,19 @@ static void buffer_insert_cmd(Buffer *self, key_t cmd) {
             prepend_undo_direction(self, self->momentum);
             keystroke_prepend_key(
                 self->current_undo_keystroke,
-                string_builder_get_char(self->contents, contents_idx));
+                buffer_space_get(self->contents, self->cursor_pos));
             prepend_undo_direction(self, reverse_direction(self->momentum));
             self->momentum = reverse_direction(self->momentum);
             prepend_undo_direction(self, self->momentum);
         }
-        string_builder_set_char(self->contents, contents_idx, ' ');
+        buffer_space_put(self->contents, self->cursor_pos, ' ');
     } else {
         if (self->is_recording) {
             keystroke_prepend_key(
                 self->current_undo_keystroke,
-                string_builder_get_char(self->contents, contents_idx));
+                buffer_space_get(self->contents, self->cursor_pos));
         }
-        string_builder_set_char(self->contents, contents_idx, cmd);
+        buffer_space_put(self->contents, self->cursor_pos, cmd);
         if (!self->is_replacing) {
             force_follow_momentum(self);
         }
@@ -476,14 +330,13 @@ static void redo_last_action(Buffer *self, bool is_simulated) {
 
 static void simulate_action(Buffer *self, Action *action) {
     Keystroke *keystroke = action_get_keystroke(action);
-    while (action_get_col(action) < 0) {
+    while (action_get_pos(action).x < 0) {
         add_column_left(self);
     }
-    self->cursor_col = action_get_col(action);
-    while (action_get_row(action) < 0) {
+    while (action_get_pos(action).y < 0) {
         add_row_top(self);
     }
-    self->cursor_row = action_get_row(action);
+    self->cursor_pos = action_get_pos(action);
     self->momentum = action_get_momentum(action);
     execute_keystroke(self, keystroke, true);
 }
@@ -494,14 +347,15 @@ static void undo(Buffer *self) {
         undo_action = stack_get(self->undo_stack, self->stack_idx);
         redo_action = stack_get(self->redo_stack, self->stack_idx);
         simulate_action(self, undo_action);
-        while (action_get_col(redo_action) < 0) {
+
+        while (action_get_pos(redo_action).x < 0) {
             add_column_left(self);
         }
-        self->cursor_col = action_get_col(redo_action);
-        while (action_get_row(redo_action) < 0) {
+        while (action_get_pos(redo_action).y < 0) {
             add_row_top(self);
         }
-        self->cursor_row = action_get_row(redo_action);
+        self->cursor_pos = action_get_pos(redo_action);
+
         self->momentum = action_get_momentum(redo_action);
         self->stack_idx++;
     }
@@ -515,47 +369,25 @@ static void redo(Buffer *self) {
 }
 
 static StringBuilder *snatch_horizontal_line(Buffer *self) {
-    size_t contents_idx = 0;
-    size_t row = 0;
-    const size_t contents_len = string_builder_len(self->contents);
     StringBuilder *line = string_builder_create();
-    while (contents_idx < contents_len && row < self->cursor_row) {
-        if (string_builder_get_char(self->contents, contents_idx) == '\n') {
-            row++;
-        }
-        contents_idx++;
-    }
-    if (row == self->cursor_row) {
-        while (contents_idx < contents_len) {
-            if (string_builder_get_char(self->contents, contents_idx) == '\n') {
-                break;
-            }
-            string_builder_append_char(
-                line, string_builder_get_char(self->contents, contents_idx));
-            contents_idx++;
-        }
+    vector_t pos;
+    pos.y = self->cursor_pos.y;
+
+    for (pos.x = 0; pos.x < buffer_space_bottom_right(self->contents).x;
+         pos.x++) {
+        string_builder_append_char(line, buffer_space_get(self->contents, pos));
     }
     return line;
 }
 
 static StringBuilder *snatch_vertical_line(Buffer *self) {
-    size_t contents_idx;
-    size_t col = 0;
-    const size_t contents_len = string_builder_len(self->contents);
     StringBuilder *line = string_builder_create();
-    for (contents_idx = 0; contents_idx < contents_len; contents_idx++) {
-        if (string_builder_get_char(self->contents, contents_idx) == '\n') {
-            if (col <= self->cursor_col) {
-                string_builder_append_char(line, ' ');
-            }
-            col = 0;
-            continue;
-        }
-        if (col == self->cursor_col) {
-            string_builder_append_char(
-                line, string_builder_get_char(self->contents, contents_idx));
-        }
-        col++;
+    vector_t pos;
+    pos.x = self->cursor_pos.x;
+
+    for (pos.y = 0; pos.y < buffer_space_bottom_right(self->contents).y;
+         pos.y++) {
+        string_builder_append_char(line, buffer_space_get(self->contents, pos));
     }
     return line;
 }
@@ -597,90 +429,60 @@ static void jump_line_end(Buffer *self, bool start) {
     }
 
     if (angle_degrees_between(self->momentum, DOWN) == 90) {
-        self->cursor_col = line_end;
+        self->cursor_pos.x = line_end;
     } else {
-        self->cursor_row = line_end;
+        self->cursor_pos.y = line_end;
     }
     string_builder_destroy(line);
 }
 
 typedef struct {
-    size_t top_row;
-    size_t left_col;
-    size_t bottom_row;
-    size_t right_col;
+    vector_t top_left;
+    vector_t bottom_right;
 } selection_t;
 
 static selection_t get_selection(Buffer *self) {
     selection_t selection;
     if (self->mode == SELECT) {
-        if (self->selection_start_row < self->cursor_row) {
-            selection.top_row = self->selection_start_row;
-            selection.bottom_row = self->cursor_row;
+        if (self->selection_start_pos.x < self->cursor_pos.x) {
+            selection.top_left.x = self->selection_start_pos.x;
+            selection.bottom_right.x = self->cursor_pos.x;
         } else {
-            selection.top_row = self->cursor_row;
-            selection.bottom_row = self->selection_start_row;
+            selection.top_left.x = self->cursor_pos.x;
+            selection.bottom_right.x = self->selection_start_pos.x;
         }
-        if (self->selection_start_col < self->cursor_col) {
-            selection.left_col = self->selection_start_col;
-            selection.right_col = self->cursor_col;
+        if (self->selection_start_pos.x < self->cursor_pos.x) {
+            selection.top_left.x = self->selection_start_pos.x;
+            selection.bottom_right.x = self->cursor_pos.x;
         } else {
-            selection.left_col = self->cursor_col;
-            selection.right_col = self->selection_start_col;
+            selection.top_left.x = self->cursor_pos.x;
+            selection.bottom_right.x = self->selection_start_pos.x;
         }
     } else {
-        selection.top_row = self->cursor_row;
-        selection.left_col = self->cursor_col;
-        selection.bottom_row = self->cursor_row;
-        selection.right_col = self->cursor_col;
+        selection.top_left = self->cursor_pos;
+        selection.bottom_right = self->cursor_pos;
     }
     return selection;
 }
 
 static void yank_selection(Buffer *self) {
     selection_t selection = get_selection(self);
-    size_t contents_idx = get_row_contents_idx(self, selection.top_row);
-    const size_t contents_len = string_builder_len(self->contents);
-    size_t selection_row = 0;
-    size_t contents_col = 0;
-    char contents_char;
-    size_t i;
-    size_t row_chars_written;
+    vector_t pos;
 
     keystroke_destroy(self->yanked);
     self->yanked = keystroke_create();
     keystroke_append_key(self->yanked, 'i');
 
-    while (selection_row < selection.bottom_row - selection.top_row + 1) {
-        if (contents_idx >= contents_len) {
-            contents_char = '\n';
-        } else {
-            contents_char
-                = string_builder_get_char(self->contents, contents_idx);
-            contents_idx++;
+    for (pos.y = selection.top_left.y; pos.y <= selection.bottom_right.y;
+         pos.y++) {
+        for (pos.x = selection.top_left.x; pos.x <= selection.bottom_right.x;
+             pos.x++) {
+            keystroke_append_key(self->yanked,
+                                 buffer_space_get(self->contents, pos));
         }
-        if (contents_char == '\n') {
-            row_chars_written = contents_col > selection.left_col
-                                    ? contents_col - selection.left_col
-                                    : 0;
-            if (contents_col < selection.right_col) {
-                for (i = 0; i < selection.right_col - selection.left_col + 1
-                                    - row_chars_written;
-                     i++) {
-                    keystroke_append_key(self->yanked, ' ');
-                }
-            }
-            keystroke_append_key(self->yanked, '\n');
-            contents_col = 0;
-            selection_row++;
-            continue;
-        }
-        if (selection.left_col <= contents_col
-            && contents_col <= selection.right_col) {
-            keystroke_append_key(self->yanked, contents_char);
-        }
-        contents_col++;
+        keystroke_append_key(self->yanked, '\n');
     }
+
     keystroke_append_key(self->yanked, ESC_KEY);
 }
 
@@ -704,8 +506,7 @@ static void cut_selection(Buffer *self, bool is_simulated) {
     }
     keystroke_append_key(delete_selection, ESC_KEY);
 
-    self->cursor_row = selection.top_row;
-    self->cursor_col = selection.left_col;
+    self->cursor_pos = selection.top_left;
     self->momentum = RIGHT;
 
     execute_keystroke(self, delete_selection, is_simulated);
@@ -730,8 +531,7 @@ static void buffer_normal_cmd(Buffer *self, key_t cmd, bool is_simulated) {
         case ESC_KEY: self->mode = NORMAL; break;
         case 'v':
             if (self->mode == NORMAL) {
-                self->selection_start_col = self->cursor_col;
-                self->selection_start_row = self->cursor_row;
+                self->selection_start_pos = self->cursor_pos;
                 self->mode = SELECT;
             }
             break;
@@ -753,8 +553,7 @@ static void buffer_normal_cmd(Buffer *self, key_t cmd, bool is_simulated) {
             } else if (cmd == 'r') {
                 self->is_replacing = true;
             }
-            self->insert_start_row = self->cursor_row;
-            self->insert_start_col = self->cursor_col;
+            self->insert_start_pos = self->cursor_pos;
             if (!is_simulated) {
                 keystroke_append_key(self->current_redo_keystroke, cmd);
                 keystroke_prepend_key(self->current_undo_keystroke, ESC_KEY);
@@ -799,172 +598,6 @@ void buffer_cmd(Buffer *self, key_t cmd, bool is_simulated) {
     }
 }
 
-static void buffer_clean_vertical_whitespace(Buffer *self) {
-    size_t i;
-    size_t contents_len = string_builder_len(self->contents);
-    bool found_first = false, found_last = false;
-    char c;
-    int32_t remove_row_target = 0;
-    /* size_max if there is no last new line */
-    size_t last_new_line_idx = SIZE_MAX;
-    for (i = 0; i < contents_len && !found_first; i++) {
-        c = string_builder_get_char(self->contents, i);
-        if (c == '\n') {
-            last_new_line_idx = i;
-            remove_action_row(self, remove_row_target);
-            remove_row_target--;
-        } else if (c != ' ' && c != '\t') {
-            found_first = true;
-        }
-    }
-
-    /* remove lines at beginning */
-    if (found_first && last_new_line_idx != SIZE_MAX) {
-        string_builder_remove_range(self->contents, 0, last_new_line_idx + 1);
-        contents_len -= last_new_line_idx + 1;
-    }
-    i = contents_len;
-    do {
-        i--;
-        c = string_builder_get_char(self->contents, i);
-        if (c != '\n' && c != '\t' && c != ' ') {
-            found_last = true;
-        }
-    } while (i != 0 && !found_last);
-
-    /* remove lines at end */
-    if (found_last && i + 1 <= contents_len) {
-        string_builder_remove_range(self->contents, i + 1, contents_len);
-    }
-
-    /* ensure new line at end */
-    string_builder_append_char(self->contents, '\n');
-}
-
-static void buffer_remove_left_columns(Buffer *self, size_t column_ct) {
-    size_t contents_idx = 0;
-    char contents_char;
-    size_t col = 0;
-    size_t line_start = 0;
-    int32_t i = 0;
-    for (i = 0; i < (int32_t)column_ct; i++) {
-        remove_action_col(self, -i);
-    }
-    while (contents_idx < string_builder_len(self->contents)) {
-        contents_char = string_builder_get_char(self->contents, contents_idx);
-        if (col == column_ct || (contents_char == '\n' && col <= column_ct)) {
-            string_builder_remove_range(self->contents, line_start,
-                                        contents_idx);
-            contents_idx = line_start;
-        }
-        if (contents_char == '\n') {
-            line_start = contents_idx + 1;
-            col = 0;
-        } else {
-            col++;
-        }
-        contents_idx++;
-    }
-}
-
-static void buffer_clean_horizontal_whitespace(Buffer *self) {
-    size_t left_to_remove = SIZE_MAX;
-    size_t contents_idx = 0;
-    char contents_char;
-    size_t col = 0;
-    size_t last_non_whitespace = 0;
-    bool found_first = false;
-    while (contents_idx < string_builder_len(self->contents)) {
-        contents_char = string_builder_get_char(self->contents, contents_idx);
-        if (contents_char == '\n') {
-            if (col > 0 && col != last_non_whitespace + 1) {
-                string_builder_remove_range(
-                    self->contents, last_non_whitespace + 1, contents_idx);
-                contents_idx = last_non_whitespace + 1;
-            }
-            col = 0;
-            found_first = false;
-            last_non_whitespace = contents_idx + 1;
-        } else {
-            if (contents_char != '\t' && contents_char != ' ') {
-                last_non_whitespace = contents_idx;
-                if (!found_first) {
-                    if (col < left_to_remove) {
-                        left_to_remove = col;
-                    }
-                    found_first = true;
-                }
-            }
-            col++;
-        }
-        contents_idx++;
-    }
-    if (left_to_remove != SIZE_MAX) {
-        buffer_remove_left_columns(self, left_to_remove);
-    }
-}
-
-void buffer_clean_whitespace(Buffer *self) {
-    buffer_clean_vertical_whitespace(self);
-    buffer_clean_horizontal_whitespace(self);
-}
-
-/**
- * Update the `top_row_contents_idx`, `rows_past_end`, and `top_offset` fields
- * These are all necessary to improve speed in large files.
- */
-static void update_top_offset(Buffer *self, size_t new_top_offset) {
-    const size_t contents_len = string_builder_len(self->contents);
-    char contents_char;
-
-    if (new_top_offset == 0) {
-        self->top_offset = 0;
-        self->top_row_contents_idx = 0;
-        self->rows_past_end = 0;
-    } else if (new_top_offset > self->top_offset) {
-        while (new_top_offset > self->top_offset) {
-            if (self->top_row_contents_idx == contents_len) {
-                self->rows_past_end += new_top_offset - self->top_offset;
-                self->top_offset = new_top_offset;
-            } else {
-                contents_char = ' ';
-                do {
-                    contents_char = string_builder_get_char(
-                        self->contents, self->top_row_contents_idx);
-                    self->top_row_contents_idx++;
-                    if (contents_char == '\n') {
-                        self->top_offset++;
-                        break;
-                    }
-                } while (self->top_row_contents_idx != contents_len);
-            }
-        }
-    } else {
-        while (new_top_offset < self->top_offset) {
-            if (self->rows_past_end > 0) {
-                self->rows_past_end--;
-                self->top_offset--;
-            } else {
-                do {
-                    self->top_row_contents_idx--;
-                    contents_char = string_builder_get_char(
-                        self->contents, self->top_row_contents_idx);
-                } while (contents_char != '\n');
-                self->top_offset--;
-            }
-        }
-        if (self->rows_past_end == 0) {
-            /* goto beginning of line */
-            do {
-                self->top_row_contents_idx--;
-                contents_char = string_builder_get_char(
-                    self->contents, self->top_row_contents_idx);
-            } while (contents_char != '\n');
-            self->top_row_contents_idx++;
-        }
-    }
-}
-
 /**
  * Move frame as necessary to fit cursor.
  */
@@ -975,76 +608,60 @@ static void fit_frame_to_cursor(Buffer *self, uint16_t row_ct,
     const uint16_t min_col = self->left_offset;
     const uint16_t max_col = min_col + col_ct - 1;
 
-    if (self->cursor_row < min_row) {
-        update_top_offset(self, self->cursor_row);
-    } else if (self->cursor_row > max_row) {
-        update_top_offset(self, self->cursor_row - row_ct + 1);
+    if (self->cursor_pos.y < min_row) {
+        self->top_offset = self->cursor_pos.y;
+    } else if (self->cursor_pos.y > max_row) {
+        self->top_offset = self->cursor_pos.y - row_ct + 1;
     }
 
-    if (self->cursor_col < min_col) {
-        self->left_offset = self->cursor_col;
-    } else if (self->cursor_col > max_col) {
-        self->left_offset = self->cursor_col - col_ct + 1;
+    if (self->cursor_pos.x < min_col) {
+        self->left_offset = self->cursor_pos.x;
+    } else if (self->cursor_pos.x > max_col) {
+        self->left_offset = self->cursor_pos.x - col_ct + 1;
     }
 }
 
-static bool is_selected(Buffer *self, size_t row, size_t col) {
+static bool is_selected(Buffer *self, vector_t pos) {
     bool is_row_selected, is_col_selected;
 
     if (self->mode != SELECT) {
         return false;
     }
     is_row_selected
-        = (self->selection_start_row <= row && row <= self->cursor_row)
-          || (row <= self->selection_start_row && self->cursor_row <= row);
+        = (self->selection_start_pos.y <= pos.y && pos.y <= self->cursor_pos.y)
+          || (pos.y <= self->selection_start_pos.y
+              && self->cursor_pos.y <= pos.y);
     is_col_selected
-        = (self->selection_start_col <= col && col <= self->cursor_col)
-          || (col <= self->selection_start_col && self->cursor_col <= col);
+        = (self->selection_start_pos.x <= pos.x && pos.x <= self->cursor_pos.x)
+          || (pos.x <= self->selection_start_pos.x
+              && self->cursor_pos.x <= pos.x);
     return is_row_selected && is_col_selected;
 }
 
 void buffer_build_display(Buffer *self, StringBuilder *display,
                           uint16_t top_offset, uint16_t left_offset,
                           uint16_t row_ct, uint16_t col_ct) {
-    uint16_t row, col = 0;
-    size_t contents_idx;
-    const size_t contents_len = string_builder_len(self->contents);
+    vector_t pos;
     char contents_char;
 
     fit_frame_to_cursor(self, row_ct, col_ct);
-    row = self->top_offset;
-    contents_idx = self->top_row_contents_idx;
-
     move_cursor(display, top_offset + 1, left_offset + 1);
-    while (row < row_ct + self->top_offset) {
-        if (contents_idx < contents_len) {
-            contents_char
-                = string_builder_get_char(self->contents, contents_idx);
-        } else {
-            contents_char = '\n';
-        }
-        if (contents_char == '\n') {
-            if (col >= col_ct + self->left_offset) {
-                row++;
-                col = 0;
-                move_cursor(display, row + top_offset - self->top_offset + 1,
-                            left_offset + 1);
-                contents_idx++;
-                continue;
+
+    for (pos.y = self->top_offset; pos.y < row_ct + self->top_offset; pos.y++) {
+        move_cursor(display, pos.y + top_offset - self->top_offset + 1,
+                    left_offset + 1);
+        for (pos.x = self->left_offset; pos.x < col_ct + self->left_offset;
+             pos.x++) {
+            contents_char = buffer_space_get(self->contents, pos);
+            if (contents_char == '\t' || contents_char == '\n'
+                || contents_char == '\r') {
+                /* TODO - how should tabs be displayed? is this best way? */
+                contents_char = ' ';
+            } else if (!isprint(contents_char)) {
+                /* TODO - what about non-printable characters? */
+                contents_char = '?';
             }
-        } else {
-            contents_idx++;
-        }
-        if (contents_char == '\t' || contents_char == '\n'
-            || contents_char == '\r') {
-            /* TODO - how should tabs be displayed? is this best way? */
-            contents_char = ' ';
-        } else if (!isprint(contents_char)) {
-            /* TODO - what about non-printable characters? */
-            contents_char = '?';
-        }
-        if (self->left_offset <= col && col < self->left_offset + col_ct) {
-            if (is_selected(self, row, col)) {
+            if (is_selected(self, pos)) {
                 string_builder_append(display, HIGHLIGHT);
                 string_builder_append_char(display, contents_char);
                 string_builder_append(display, RESET);
@@ -1052,19 +669,18 @@ void buffer_build_display(Buffer *self, StringBuilder *display,
                 string_builder_append_char(display, contents_char);
             }
         }
-        col++;
     }
 
-    move_cursor(display, top_offset + 1 + self->cursor_row - self->top_offset,
-                left_offset + 1 + self->cursor_col - self->left_offset);
+    move_cursor(display, top_offset + 1 + self->cursor_pos.y - self->top_offset,
+                left_offset + 1 + self->cursor_pos.x - self->left_offset);
 }
 
 size_t buffer_get_row(Buffer *self) {
-    return self->cursor_row + 1;
+    return self->cursor_pos.y + 1;
 }
 
 size_t buffer_get_col(Buffer *self) {
-    return self->cursor_col + 1;
+    return self->cursor_pos.x + 1;
 }
 
 direction_t buffer_get_momentum(Buffer *self) {
@@ -1075,13 +691,16 @@ char *buffer_name(Buffer *self) {
     return self->filename;
 }
 
+void buffer_clean_whitespace(Buffer *self) {
+    buffer_space_clean_whitespace(self->contents);
+}
+
 bool buffer_save(Buffer *self) {
     FILE *file = fopen(self->filename, "w");
     if (!file) {
         return false;
     }
-    fwrite(string_builder_to_string(self->contents), sizeof(char),
-           string_builder_len(self->contents), file);
+    buffer_space_write(self->contents, file);
     fclose(file);
     self->is_modified = false;
     return true;
@@ -1092,24 +711,6 @@ bool buffer_is_modified(Buffer *self) {
 }
 
 #define CHUNK_SIZE 128
-
-/**
- * Initialize buffer. Return `true` if new file.
- */
-static bool init_buffer(Buffer *self) {
-    FILE *file = fopen(self->filename, "r");
-    char chunk[CHUNK_SIZE];
-    size_t n;
-
-    if (file) {
-        do {
-            n = fread(chunk, sizeof(char), CHUNK_SIZE, file);
-            string_builder_append_bytes(self->contents, chunk, n);
-        } while (n == CHUNK_SIZE);
-        fclose(file);
-    }
-    return !!file;
-}
 
 Buffer *buffer_create(const char *filename) {
     Buffer *self = calloc(1, sizeof(Buffer));
@@ -1125,15 +726,12 @@ Buffer *buffer_create(const char *filename) {
     }
     strcpy(self->filename, filename);
 
-    self->contents = string_builder_create();
+    self->contents = buffer_space_create(self->filename);
     if (!self->contents) goto buffer_create_fail;
 
-    self->new_file = init_buffer(self);
-
-    self->cursor_row = 0;
-    self->cursor_col = 0;
+    self->cursor_pos.y = 0;
+    self->cursor_pos.x = 0;
     self->top_offset = 0;
-    self->top_row_contents_idx = 0;
     self->rows_past_end = 0;
     self->left_offset = 0;
     self->momentum = RIGHT;
@@ -1162,7 +760,7 @@ buffer_create_fail:
 void buffer_destroy(Buffer *self) {
     if (self) {
         free(self->filename);
-        string_builder_destroy(self->contents);
+        buffer_space_destroy(self->contents);
 
         stack_destroy(self->redo_stack);
         stack_destroy(self->undo_stack);

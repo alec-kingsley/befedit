@@ -400,7 +400,9 @@ typedef struct {
 
 static void *interpreter_run_wrapper(void *arg) {
     interpreter_thread_args_t *args = (interpreter_thread_args_t *)arg;
-    interpreter_run(args->interpreter);
+
+    /* don't handle return code in case of `q` */
+    (void)interpreter_run(args->interpreter);
 
     pthread_mutex_lock(args->mutex);
     *args->finished = true;
