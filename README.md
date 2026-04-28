@@ -131,6 +131,14 @@ If it takes > 2 sec to run the config program, it will give up.
 The Befunge-98 interpreter used is the [SBI interpreter](https://github.com/alec-kingsley/sbi),
 with handprint `0x534249`, with the following additional fingerprint:
 
+### Output
+
+If the config (or any macro) print anything, it will be printed as the status message.
+This will overwrite any status message that would be caused by keystrokes run by the config file.
+
+For example, if the config script saves a file and prints nothing, then the output will be the default
+"{buffer name} saved". However, if it prints anything, it will overwrite that message.
+
 ### `=` instruction
 
 The Funge-98 `=` (execute) instruction will execute the string as though it were a

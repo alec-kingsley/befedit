@@ -445,6 +445,8 @@ static void run_interpreter_on_timer(Editor *self,
     pthread_t thread;
     struct timespec timeout;
     int ret;
+    const char *output;
+    string_builder_set(self->status_message, "");
 
     if (pthread_create(&thread, NULL, interpreter_run_wrapper, &args)) {
         report_system_error(FILENAME ": failed to spawn thread");
@@ -476,11 +478,15 @@ static void run_interpreter_on_timer(Editor *self,
 
     if (*args.finished) {
         pthread_join(thread, NULL);
+        output = interpreter_get_output(self->config);
         if (*(interpreter_is_poisoned_ref(self->config))) {
             self->status_message_is_error = true;
             string_builder_set(self->status_message, "interpreter error: ");
         } else {
-            string_builder_set(self->status_message, "");
+            if (*output) {
+                /* if output is empty, it shouldn't be reset */
+                string_builder_set(self->status_message, "");
+            }
         }
         string_builder_append(self->status_message,
                               interpreter_get_output(self->config));
