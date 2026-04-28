@@ -24,6 +24,11 @@ bool *interpreter_is_poisoned_ref(Interpreter *self);
 int interpreter_run(Interpreter *self);
 
 /**
+ * Spawn an IP for a macro defined by the BFDT fingerprint.
+ */
+void interpreter_spawn_macro_ip(Interpreter *self, vector_t pos);
+
+/**
  * Create a new interpreter.
  * Return NULL if error occured.
  */

@@ -9,7 +9,7 @@ SRC_SRCS := $(filter-out $(SRC_MAIN), $(SRCS))
 
 OBJS := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SRC_SRCS))
 
-CFLAGS := -Wextra -Werror -Wall -Wimplicit -pedantic -Wreturn-type -Wformat -Wmissing-prototypes -Wstrict-prototypes -std=c89 -O3 -I$(INCLUDE_DIR)
+CFLAGS := -Wextra -Werror -Wall -Wimplicit -pedantic -Wreturn-type -Wformat -Wmissing-prototypes -Wstrict-prototypes -std=c89 -O3 -I$(INCLUDE_DIR) -g
 
 TARGET := $(BIN_DIR)/befedit
 

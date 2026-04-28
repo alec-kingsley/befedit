@@ -2,6 +2,7 @@
 #include "editor.h"
 #include "funge_space.h"
 #include "funge_stack.h"
+#include "keystroke.h"
 #include "queue.h"
 #include "reporter.h"
 #include "stack.h"
@@ -23,8 +24,30 @@
 #define T_IMPLEMENTED 1
 #define I_IMPLEMENTED 0
 #define O_IMPLEMENTED 0
-#define EQ_IMPLEMENTED 0
+#define EQ_IMPLEMENTED 1
 #define UNBUFFERED_IO 1
+
+/**
+ * Taken from the official documentation:
+ * https://quuxplusone.github.io/Fungus/docs/spec98.html#System
+ *
+ * 0 = Unavailable
+ * 1 = Equivalent to C-language system() call behaviour
+ * 2 = Equivalent to interpretation by a specific shell or program
+ *
+ *     This shell or program is specified by the interpreter but should ideally
+ * be customizable by the interpreter-user, if applicable. Befunge programs that
+ * run under this paradigm should document what program they expect to interpret
+ * the string passed to =.
+ *
+ * 3 = Equivalent to interpretation by the same shell as started this Funge
+ * interpreter, if applicable
+ *
+ *     If the interpreter supports this paradigm, then in this manner, the user
+ * executing a Befunge source can easily choose which shell to use for =
+ * instructions.
+ */
+#define OPERATING_PARADIGM 2
 
 uint16_t g_next_ip_id = 0;
 
@@ -97,27 +120,26 @@ static void interpreter_error(Interpreter *self, const char *error) {
  * =========================
  */
 
-static void bfdt_c(Interpreter *self) {
-    Keystroke *macro = keystroke_create();
-    funge_cell_t x = funge_stack_pop(self->ip->stack);
-    funge_cell_t key;
+static void bfdt_k(Interpreter *self) {
+    funge_cell_t key = funge_stack_pop(self->ip->stack);
+    funge_cell_t y
+        = funge_stack_pop(self->ip->stack) + self->ip->storage_offset.y;
+    funge_cell_t x
+        = funge_stack_pop(self->ip->stack) + self->ip->storage_offset.x;
+    vector_t pos;
+    pos.x = x;
+    pos.y = y;
 
-    if ('a' <= x && x <= 'z') {
-        x = x - 'a' + 'A';
+    funge_stack_push(self->ip->stack, funge_space_get(self->funge_space, pos));
+
+    if ('a' <= key && key <= 'z') {
+        key = key - 'a' + 'A';
     }
 
-    do {
-        key = funge_stack_pop(self->ip->stack);
-        if (key != 0) {
-            keystroke_append_key(macro, key);
-        }
-    } while (key != 0);
-
-    if (x < 'A' || x > 'Z') {
-        keystroke_destroy(macro);
+    if (key < 'A' || key > 'Z') {
         reflect(self);
     } else {
-        editor_registor_macro(self->editor, macro, x);
+        editor_registor_macro(self->editor, pos, key);
     }
 }
 
@@ -224,7 +246,7 @@ static const fingerprint_t FINGERPRINTS[] = {
      {
          NULL,   /* A */
          NULL,   /* B */
-         bfdt_c, /* C */
+         NULL,   /* C */
          NULL,   /* D */
          NULL,   /* E */
          NULL,   /* F */
@@ -232,7 +254,7 @@ static const fingerprint_t FINGERPRINTS[] = {
          NULL,   /* H */
          NULL,   /* I */
          NULL,   /* J */
-         NULL,   /* K */
+         bfdt_k, /* K */
          NULL,   /* L */
          NULL,   /* M */
          NULL,   /* N */
@@ -842,8 +864,7 @@ static void sys_info(Interpreter *self) {
 #endif
 
     /* operating paradigm */
-    /* 1 represents `system()` behavior in C */
-    funge_stack_push(self->ip->stack, EQ_IMPLEMENTED ? 1 : 0);
+    funge_stack_push(self->ip->stack, EQ_IMPLEMENTED ? OPERATING_PARADIGM : 0);
 
     /* version number */
     funge_stack_push(self->ip->stack, VERSION_NUMBER);
@@ -940,10 +961,22 @@ static void unload_semantics(Interpreter *self) {
     }
 }
 
+static void end_ip(Interpreter *self) {
+    instruction_pointer_destroy(self->ip);
+    if (queue_is_empty(self->other_ips)) {
+        self->ip = NULL;
+    } else {
+        self->ip = queue_dequeue(self->other_ips);
+    }
+}
+
 static void quit(Interpreter *self) {
-    /* NOTE - doesn't actually cause exit */
-    /* interpreter has to handle that specifically */
     self->return_code = funge_stack_pop(self->ip->stack);
+    while (!queue_is_empty(self->other_ips)) {
+        instruction_pointer_destroy(queue_dequeue(self->other_ips));
+    }
+    instruction_pointer_destroy(self->ip);
+    self->ip = NULL;
 }
 
 static void split(Interpreter *self) {
@@ -951,6 +984,19 @@ static void split(Interpreter *self) {
     new->momentum.x = -self->ip->momentum.x;
     new->momentum.y = -self->ip->momentum.y;
     queue_enqueue(self->other_ips, new);
+}
+
+static void execute(Interpreter *self) {
+    Keystroke *keystroke = keystroke_create();
+    funge_cell_t cell = funge_stack_pop(self->ip->stack);
+    while (cell != 0) {
+        keystroke_append_key(keystroke, cell);
+        cell = funge_stack_pop(self->ip->stack);
+    }
+    if (!editor_execute_keystroke(self->editor, keystroke)) {
+        interpreter_error(self, "editor terminated");
+    }
+    keystroke_destroy(keystroke);
 }
 
 static void execute_string_mode_instruction(Interpreter *self,
@@ -976,7 +1022,6 @@ static void execute_string_mode_instruction(Interpreter *self,
 
 static void execute_instruction(Interpreter *self, funge_cell_t instr) {
     /** ---- TODO ----
-     * = - execute
      * i - input file
      * o - output file
      *
@@ -1047,44 +1092,66 @@ static void execute_instruction(Interpreter *self, funge_cell_t instr) {
         case 'y': sys_info(self); break;
         case '(': load_semantics(self); break;
         case ')': unload_semantics(self); break;
+        case '@': end_ip(self); break;
         case 'q': quit(self); break;
         case 't': split(self); break;
+        case '=': execute(self); break;
         case 'r':
         default: reflect(self); break;
         }
+    }
+}
+static void next_ip(Interpreter *self) {
+    if (!queue_is_empty(self->other_ips)) {
+        queue_enqueue(self->other_ips, self->ip);
+        self->ip = queue_dequeue(self->other_ips);
     }
 }
 
 int interpreter_run(Interpreter *self) {
     funge_cell_t instr = funge_space_get(self->funge_space, self->ip->pos);
     while (!self->is_poisoned) {
-        /*printf(ORANGE "[%c]" RESET, instr);*/
-        if (instr == '@' && !self->ip->string_mode) {
-            if (queue_is_empty(self->other_ips)) {
-                break;
-            } else {
-                instruction_pointer_destroy(self->ip);
-                self->ip = queue_dequeue(self->other_ips);
-            }
+        if (self->ip->string_mode) {
+            execute_string_mode_instruction(self, instr);
+            next_ip(self);
         } else {
-            if (self->ip->string_mode) {
-                execute_string_mode_instruction(self, instr);
-            } else {
-                execute_instruction(self, instr);
-            }
-            if (self->ip->string_mode || (instr != ' ' && instr != ';')) {
+            execute_instruction(self, instr);
+            if (!self->ip) break;
+            if (instr != ' ' && instr != ';') {
                 /* spaces and comments are tickless */
-                if (!queue_is_empty(self->other_ips)) {
-                    /* rotate to next IP */
-                    queue_enqueue(self->other_ips, self->ip);
-                    self->ip = queue_dequeue(self->other_ips);
-                }
+                next_ip(self);
             }
         }
-        if (instr == 'q' && !self->ip->string_mode) break;
         instr = next_instruction(self);
     }
     return self->return_code;
+}
+
+void interpreter_spawn_macro_ip(Interpreter *self, vector_t pos) {
+    size_t i;
+    InstructionPointer *macro_ip = instruction_pointer_create();
+    option_fingerprint_t fingerprint = find_fingerprint(FINGERPRINT_ID("BFDT"));
+    void *func;
+    macro_ip->pos = pos;
+    if (fingerprint.is_some) {
+        for (i = 0; i < 26; i++) {
+            if (fingerprint.unwrap.funcs[i] != NULL) {
+                /* hacky trick to shut up compiler about converting function
+                 * pointers */
+                /* TODO - is this actually dangerous? */
+                memcpy(&func, &fingerprint.unwrap.funcs[i], sizeof(func));
+                stack_push(self->ip->semantics[i], func);
+            }
+        }
+    } else {
+        report_logic_error(FILENAME
+                           ": expected BFDT fingerprint to exist for macro");
+    }
+    if (!self->ip) {
+        self->ip = macro_ip;
+    } else {
+        queue_enqueue(self->other_ips, macro_ip);
+    }
 }
 
 #define CHUNK_SIZE 128

@@ -131,11 +131,10 @@ If it takes > 2 sec to run the config program, it will give up.
 The Befunge-98 interpreter used is the [SBI interpreter](https://github.com/alec-kingsley/sbi),
 with handprint `0x534249`, with the following additional fingerprint:
 
-### `BFDT` fingerprint
+### `=` instruction
 
-`C` - pops a letter (we'll call this `x`), then pops values until it reaches a 0.
-
-These values are saved as a keystroke, and `ctrl-{x}` will execute that keystroke.
+The Funge-98 `=` (execute) instruction will execute the string as though it were a
+keystroke.
 
 In addition to characters, the following values may be used for special keys:
 
@@ -153,27 +152,36 @@ In addition to characters, the following values may be used for special keys:
 264 - PAGE DOWN
 ```
 
+### `BFDT` fingerprint
+
+The `BFDT` fingerprint provides the following commands:
+
+`K` - pop a letter `x` followed by a vector `v`. This defines a macro which will execute
+starting at `v` with an empty stack, a momentum heading to the right, and the `BFDT` fingerprint
+pre-loaded (it will NOT come with anything pushed to stack). The macro may load or unload any
+fingerprints, including `BFDT`. `ctrl-{x}` will execute this macro.
+
+If `x` is not a letter, `K` will reflect. If `x` is 'J' or 'M', it will not reflect,
+however the macro will do nothing.
+
+`x` can be upper or lower case.
+
 For example, if you would like `ctrl-s` to save your current buffer, you could use the following
 config file:
 
 ```
-"TDFB"4(  ;load befedit fingerprint; v
-v *93 ":w" a 0                       <
-  ^^^      ^
-    |      |
-    |      +--- enter
-    +-- esc
-
-> 'SC ; set to ctrl-s ; @
- ```
+"TDFB"4(  ;load befedit fingerprint;  v
+v                                     <
+#>    ;macro;    v
+@= *93 ":w" a 0  <                    <
+   ^^^      ^
+     |      |
+     |      +--- enter
+     +-- esc
+ 
+ >21 'SK ;set to ctrl-s; @
+```
 
 Or, more consisely:
 
-`"TDFB"4(0a"w:"39*'SC@`
-
-If `x` is not a letter, `C` will reflect. If `x` is 'J' or 'M', it will not reflect, however the
-macro will do nothing.
-
-`x` can be upper or lower case.
-
-
+`"TDFB"4(e0'SK@0a"w:"93*=@`

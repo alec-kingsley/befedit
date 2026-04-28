@@ -280,7 +280,8 @@ void buffer_space_remove_col(BufferSpace *self, int32_t col) {
  */
 void buffer_space_write(BufferSpace *self, FILE *file) {
     size_t i;
-    for (i = 0; i < self->line_ct; i++) {
+    /* if you compare i to `self->line_ct` instead, it will print a bunch of extra lines */ 
+    for (i = 0; i <= (size_t)self->buffer_bottom_right.y; i++) {
         fwrite(string_builder_to_string(self->lines[i]), sizeof(char),
                string_builder_len(self->lines[i]), file);
         /* TODO - add setting for \r\n instead */

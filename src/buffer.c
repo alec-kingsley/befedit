@@ -692,7 +692,18 @@ char *buffer_name(Buffer *self) {
 }
 
 void buffer_clean_whitespace(Buffer *self) {
+    int32_t old_last_row = buffer_space_bottom_right(self->contents).y;
+    int32_t new_last_row;
+    int32_t rows_removed;
     buffer_space_clean_whitespace(self->contents);
+    new_last_row = buffer_space_bottom_right(self->contents).y;
+    rows_removed = old_last_row - new_last_row;
+    if (self->cursor_pos.y >= rows_removed) {
+        self->cursor_pos.y -= rows_removed;
+    }
+    if (self->top_offset >= rows_removed) {
+        self->top_offset -= rows_removed;
+    }
 }
 
 bool buffer_save(Buffer *self) {

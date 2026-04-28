@@ -32,22 +32,25 @@ struct Editor {
     mode_t saved_mode; /* for command mode */
     mode_t mode;
 
-    /* macro for ctrl keys A-Z */
-    Keystroke *macros[26];
+    /* true iff that macro exists */
+    bool macro_exists[26];
+    /* macro positions for ctrl keys A-Z */
+    vector_t macro_poss[26];
 
     StringBuilder *cmd;
+
+    /* NULL if config couldn't be loaded */
+    Interpreter *config;
 };
 
-void editor_registor_macro(Editor *self, Keystroke *macro, key_t key) {
+void editor_registor_macro(Editor *self, vector_t pos, key_t key) {
     const size_t i = key - 'A';
     if (i >= 26) {
         report_logic_error(FILENAME ": invalid macro");
         exit(1);
     }
-    if (self->macros[i]) {
-        keystroke_destroy(self->macros[i]);
-    }
-    self->macros[i] = macro;
+    self->macro_exists[i] = true;
+    self->macro_poss[i] = pos;
 }
 
 static void reset_status_message(Editor *self) {
@@ -396,10 +399,17 @@ typedef struct {
     pthread_mutex_t *mutex;
     pthread_cond_t *cond;
     bool *finished;
+
+    bool is_macro;
+    vector_t pos; /* for macros */
 } interpreter_thread_args_t;
 
 static void *interpreter_run_wrapper(void *arg) {
     interpreter_thread_args_t *args = (interpreter_thread_args_t *)arg;
+
+    if (args->is_macro) {
+        interpreter_spawn_macro_ip(args->interpreter, args->pos);
+    }
 
     /* don't handle return code in case of `q` */
     (void)interpreter_run(args->interpreter);
@@ -412,83 +422,118 @@ static void *interpreter_run_wrapper(void *arg) {
     return NULL;
 }
 
-#define CONFIG_TIMEOUT_SEC 2
+/**
+ * Spin up interpreter for config file.
+ */
+static void editor_init_config(Editor *self) {
+    if (check_config_exists(self)) {
+        self->config = interpreter_create(self->config_path, self);
+        if (self->config == NULL) {
+            self->status_message_is_error = true;
+            string_builder_set(self->status_message,
+                               "config error: failed to load ");
+            string_builder_append(self->status_message, self->config_path);
+        }
+    }
+}
+
+/* time for interpreter to time out */
+#define INTERPRETER_TIMEOUT_SEC 2
+
+static void run_interpreter_on_timer(Editor *self,
+                                     interpreter_thread_args_t args) {
+    pthread_t thread;
+    struct timespec timeout;
+    int ret;
+
+    if (pthread_create(&thread, NULL, interpreter_run_wrapper, &args)) {
+        report_system_error(FILENAME ": failed to spawn thread");
+        exit(1);
+    }
+    if (clock_gettime(CLOCK_REALTIME, &timeout)) {
+        report_system_error(FILENAME ": failed to get time");
+        exit(1);
+    }
+    timeout.tv_sec += INTERPRETER_TIMEOUT_SEC;
+
+    pthread_mutex_lock(args.mutex);
+    while (!*args.finished) {
+        ret = pthread_cond_timedwait(args.cond, args.mutex, &timeout);
+        if (ret != 0) {
+            /* stop the interpreter from running */
+            /* TODO - is this guaranteed to stop it in time? */
+            *(interpreter_is_poisoned_ref(self->config)) = true;
+
+            if (ret == ETIMEDOUT) {
+                break;
+            } else {
+                report_system_error(FILENAME ": failed to wait");
+                exit(1);
+            }
+        }
+    }
+    pthread_mutex_unlock(args.mutex);
+
+    if (*args.finished) {
+        pthread_join(thread, NULL);
+        if (*(interpreter_is_poisoned_ref(self->config))) {
+            self->status_message_is_error = true;
+            string_builder_set(self->status_message, "interpreter error: ");
+        } else {
+            string_builder_set(self->status_message, "");
+        }
+        string_builder_append(self->status_message,
+                              interpreter_get_output(self->config));
+    } else {
+        pthread_detach(thread);
+        /* timed out */
+        self->status_message_is_error = true;
+        string_builder_set(self->status_message, "interpreter timed out");
+    }
+    pthread_mutex_destroy(args.mutex);
+    pthread_cond_destroy(args.cond);
+}
 
 static void editor_load_config(Editor *self) {
     interpreter_thread_args_t args;
-    Interpreter *interpreter;
-    pthread_t thread;
-    struct timespec timeout;
-    pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-    pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
     bool finished = false;
-    int ret;
-
-    if (check_config_exists(self)) {
-        interpreter = interpreter_create(self->config_path, self);
-        if (interpreter == NULL) {
-            self->status_message_is_error = true;
-            string_builder_set(self->status_message, "config error: failed to load ");
-            string_builder_append(self->status_message, self->config_path);
-            pthread_mutex_destroy(&mutex);
-            pthread_cond_destroy(&cond);
-            return;
-        }
-
-        args.interpreter = interpreter;
+    editor_init_config(self);
+    if (!self->config) {
+        return;
+    } else {
+        pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+        pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
+        args.interpreter = self->config;
         args.mutex = &mutex;
         args.cond = &cond;
         args.finished = &finished;
-
-        if (pthread_create(&thread, NULL, interpreter_run_wrapper, &args)) {
-            report_system_error(FILENAME ": failed to spawn thread");
-            exit(1);
-        }
-        if (clock_gettime(CLOCK_REALTIME, &timeout)) {
-            report_system_error(FILENAME ": failed to get time");
-            exit(1);
-        }
-        timeout.tv_sec += CONFIG_TIMEOUT_SEC;
-
-        pthread_mutex_lock(&mutex);
-        while (!finished) {
-            ret = pthread_cond_timedwait(&cond, &mutex, &timeout);
-            if (ret != 0) {
-                /* stop the interpreter from running */
-                /* TODO - is this guaranteed to stop it in time? */
-                *(interpreter_is_poisoned_ref(interpreter)) = true;
-
-                if (ret == ETIMEDOUT) {
-                    break;
-                } else {
-                    report_system_error(FILENAME ": failed to wait");
-                    exit(1);
-                }
-            }
-        }
-        pthread_mutex_unlock(&mutex);
-
-        if (finished) {
-            pthread_join(thread, NULL);
-            if (*(interpreter_is_poisoned_ref(interpreter))) {
-                self->status_message_is_error = true;
-                string_builder_set(self->status_message, "config error: ");
-            } else {
-                string_builder_set(self->status_message, "");
-            }
-            string_builder_append(self->status_message,
-                                  interpreter_get_output(interpreter));
-        } else {
-            pthread_detach(thread);
-            /* timed out */
-            self->status_message_is_error = true;
-            string_builder_set(self->status_message, "config file timed out");
-        }
-
-        interpreter_destroy(interpreter);
+        args.is_macro = false;
+        run_interpreter_on_timer(self, args);
     }
-    pthread_mutex_destroy(&mutex);
-    pthread_cond_destroy(&cond);
+}
+
+/**
+ * Return `true` iff should keep running
+ */
+static bool editor_execute_macro(Editor *self, vector_t pos) {
+    interpreter_thread_args_t args;
+    bool finished = false;
+    editor_init_config(self);
+    if (!self->config) {
+        return true;
+    } else {
+        pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+        pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
+        args.interpreter = self->config;
+        args.mutex = &mutex;
+        args.cond = &cond;
+        args.finished = &finished;
+        args.is_macro = true;
+        args.pos = pos;
+        run_interpreter_on_timer(self, args);
+    }
+    /* TODO - verify that this is only case where it should stop running */
+    return !list_is_empty(self->buffers);
 }
 
 /**
@@ -535,7 +580,7 @@ static bool editor_execute_key(Editor *self, key_t key) {
     }
 }
 
-static bool editor_execute_keystroke(Editor *self, Keystroke *keystroke) {
+bool editor_execute_keystroke(Editor *self, Keystroke *keystroke) {
     size_t i;
     bool keep_running = true;
     for (i = 0; i < keystroke_len(keystroke) && keep_running; i++) {
@@ -548,7 +593,6 @@ static bool editor_execute_keystroke(Editor *self, Keystroke *keystroke) {
 void editor_run(Editor *self) {
     key_t key;
     bool keep_running = true;
-    Keystroke *macro;
     if (list_len(self->buffers) == 0) {
         self->buffer = buffer_create("");
         if (!self->buffer) goto editor_run_fail;
@@ -560,7 +604,6 @@ void editor_run(Editor *self) {
 
     string_builder_set(self->status_message, "loading config...");
     update_screen(self);
-
     editor_load_config(self);
 
     while (keep_running) {
@@ -570,9 +613,9 @@ void editor_run(Editor *self) {
         /* TODO - is there a way to differentiate CTRL('J'), CTRL('M') and
          * newline? */
         if (CTRL('A') <= key && key <= CTRL('Z') && key != '\n') {
-            macro = self->macros[key - CTRL('A')];
-            if (macro) {
-                keep_running = editor_execute_keystroke(self, macro);
+            if (self->macro_exists[key - CTRL('A')]) {
+                keep_running = editor_execute_macro(
+                    self, self->macro_poss[key - CTRL('A')]);
             }
         } else {
             keep_running = editor_execute_key(self, key);
@@ -603,7 +646,7 @@ Editor *editor_create(void) {
     self->mode = NORMAL;
 
     for (i = 0; i < 26; i++) {
-        self->macros[i] = NULL;
+        self->macro_exists[i] = false;
     }
 
     reset_status_message(self);
@@ -616,15 +659,12 @@ editor_create_fail:
 }
 
 void editor_destroy(Editor *self) {
-    size_t i;
     if (self) {
         list_destroy(self->buffers);
         string_builder_destroy(self->status_message);
         free(self->config_path);
-        for (i = 0; i < 26; i++) {
-            keystroke_destroy(self->macros[i]);
-        }
         string_builder_destroy(self->cmd);
+        interpreter_destroy(self->config);
         free(self);
     }
 }
