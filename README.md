@@ -114,6 +114,7 @@ if it's been unmodified since opening.
 | write-quit         | x         | save and close buffer         |
 | write-quit-all     | wqa       | save and close all buffers    |
 | next               | n         | next buffer                   |
+| previous           | p         | previous buffer               |
 | clean-whitespace   | cw        | remove unnecessary whitespace |
 | open \<file>       | o \<file> | open a new buffer             |
 | config-open        |           | open config file              |

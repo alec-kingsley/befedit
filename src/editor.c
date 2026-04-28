@@ -267,6 +267,12 @@ static void editor_next(Editor *self) {
     self->buffer = list_get(self->buffers, self->buffer_idx);
 }
 
+static void editor_previous(Editor *self) {
+    self->buffer_idx += list_len(self->buffers) - 1;
+    self->buffer_idx %= list_len(self->buffers);
+    self->buffer = list_get(self->buffers, self->buffer_idx);
+}
+
 static void editor_open(Editor *self, const char *name) {
     Buffer *buffer = buffer_create(name);
     self->buffer = buffer;
@@ -290,6 +296,7 @@ static bool check_args(Editor *self, Command *command) {
     case QUIT_ALL:
     case FORCE_QUIT_ALL:
     case NEXT:
+    case PREVIOUS:
     case CLEAN_WHITESPACE: expected_arg_ct = 1; break;
     case OPEN: expected_arg_ct = 2; break;
     case CONFIG_OPEN:
@@ -329,6 +336,7 @@ static void run_command(Editor *self) {
         case QUIT_ALL: editor_quit_all(self); break;
         case FORCE_QUIT_ALL: editor_force_quit_all(self); break;
         case NEXT: editor_next(self); break;
+        case PREVIOUS: editor_previous(self); break;
         case CLEAN_WHITESPACE: buffer_clean_whitespace(self->buffer); break;
         case OPEN: editor_open(self, command_get_arg(command, 1)); break;
         case CONFIG_OPEN: editor_config_open(self); break;

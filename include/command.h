@@ -14,6 +14,7 @@ typedef enum {
     QUIT_ALL,
     FORCE_QUIT_ALL,
     NEXT,
+    PREVIOUS,
     CLEAN_WHITESPACE,
     OPEN,
     CONFIG_OPEN,

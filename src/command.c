@@ -71,6 +71,8 @@ static void init_command(Command *self) {
         self->command = FORCE_QUIT_ALL;
     } else if (strcmp(cmd, "n") == 0 || strcmp(cmd, "next") == 0) {
         self->command = NEXT;
+    } else if (strcmp(cmd, "p") == 0 || strcmp(cmd, "previous") == 0) {
+        self->command = PREVIOUS;
     } else if (strcmp(cmd, "cw") == 0 || strcmp(cmd, "clean-whitespace") == 0) {
         self->command = CLEAN_WHITESPACE;
     } else if (strcmp(cmd, "o") == 0 || strcmp(cmd, "open") == 0) {
