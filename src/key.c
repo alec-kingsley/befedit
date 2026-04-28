@@ -8,6 +8,8 @@ bool key_is_printable(key_t key) {
 void print_key(key_t key) {
     if (key_is_printable(key)) {
         putchar(key);
+    } else if (key == 10) {
+        printf("ENTER");
     } else if (CTRL('A') <= key && key <= CTRL('Z')) {
         printf("CTRL+%c", 'A' + key - CTRL('A'));
     } else {
