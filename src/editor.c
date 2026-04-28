@@ -607,12 +607,13 @@ bool editor_execute_keystroke(Editor *self, Keystroke *keystroke) {
 void editor_run(Editor *self) {
     key_t key;
     bool keep_running = true;
+    self->buffer_idx = 0;
     if (list_len(self->buffers) == 0) {
         self->buffer = buffer_create("", &self->yanked);
         if (!self->buffer) goto editor_run_fail;
         list_insert(self->buffers, self->buffer, 0);
     } else {
-        self->buffer = list_get(self->buffers, 0);
+        self->buffer = list_get(self->buffers, self->buffer_idx);
     }
     enable_raw_mode();
 
