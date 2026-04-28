@@ -173,18 +173,26 @@ void string_builder_remove_range(StringBuilder *self, size_t start,
 
 #define CHUNK_SIZE 1024
 
-void string_builder_print(StringBuilder *self) {
+static void string_builder_write(StringBuilder *self, int fd) {
     size_t bytes_left = self->len;
     int bytes_to_print;
     char *ptr = self->val;
     while (bytes_left > 0) {
         bytes_to_print = bytes_left < CHUNK_SIZE ? bytes_left : CHUNK_SIZE;
-        if (write(STDOUT_FILENO, ptr, bytes_to_print) != bytes_to_print) {
+        if (write(fd, ptr, bytes_to_print) != bytes_to_print) {
             report_system_error(FILENAME ": failed to write bytes");
         }
         ptr += bytes_to_print;
         bytes_left -= bytes_to_print;
     }
+}
+
+void string_builder_print(StringBuilder *self) {
+    string_builder_write(self, STDOUT_FILENO);
+}
+
+void string_builder_print_error(StringBuilder *self) {
+    string_builder_write(self, STDERR_FILENO);
 }
 
 StringBuilder *string_builder_create(void) {

@@ -108,7 +108,7 @@ static void disable_raw_mode(void) {
     if (g_error_buffer) {
         printf(CLEAR_SCREEN RESET_CURSOR SHOW_CURSOR);
         fflush(stdout);
-        string_builder_print(g_error_buffer);
+        string_builder_print_error(g_error_buffer);
         string_builder_destroy(g_error_buffer);
         exit(1);
     }

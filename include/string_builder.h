@@ -96,6 +96,11 @@ void string_builder_remove_range(StringBuilder *self, size_t start, size_t end);
 void string_builder_print(StringBuilder *self);
 
 /**
+ * Safely print `self` to stderr.
+ */
+void string_builder_print_error(StringBuilder *self);
+
+/**
  * Create a new `StringBuilder` object.
  * Return `NULL` on failure.
  */
