@@ -376,7 +376,7 @@ static StringBuilder *snatch_horizontal_line(Buffer *self) {
     vector_t pos;
     pos.y = self->cursor_pos.y;
 
-    for (pos.x = 0; pos.x < buffer_space_bottom_right(self->contents).x;
+    for (pos.x = 0; pos.x <= buffer_space_bottom_right(self->contents).x;
          pos.x++) {
         string_builder_append_char(line, buffer_space_get(self->contents, pos));
     }
@@ -388,7 +388,7 @@ static StringBuilder *snatch_vertical_line(Buffer *self) {
     vector_t pos;
     pos.x = self->cursor_pos.x;
 
-    for (pos.y = 0; pos.y < buffer_space_bottom_right(self->contents).y;
+    for (pos.y = 0; pos.y <= buffer_space_bottom_right(self->contents).y;
          pos.y++) {
         string_builder_append_char(line, buffer_space_get(self->contents, pos));
     }
