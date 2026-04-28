@@ -163,7 +163,9 @@ int main(void) {
     if (stat("output", &st) == -1) {
         mkdir("output", 0700);
     }
+
     test("ihello" ESC_KEY ":wq" ENTER_KEY, "output/test_1.txt");
+
     test("iRight! " ESC_KEY
 
          "jiDown! " ESC_KEY
@@ -172,9 +174,23 @@ int main(void) {
 
          "kiUp! " ESC_KEY
 
-         ":wq" ENTER_KEY
-
-         ,
+         ":wq" ENTER_KEY,
          "output/test_2.txt");
+
+    test("lljjliThis is some" ENTER_KEY
+
+         "text" ENTER_KEY ESC_KEY
+
+         "kkvkllllllllllly" ESC_KEY
+
+         "jjjjjlp"
+
+         "kkvllly" ESC_KEY
+
+         "kkhhhhhhhhjp"
+
+         ":wq" ENTER_KEY,
+
+         "output/test_3.txt");
     return 0;
 }

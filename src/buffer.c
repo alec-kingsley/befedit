@@ -75,7 +75,8 @@ struct Buffer {
 
     vector_t selection_start_pos;
 
-    Keystroke *yanked;
+    /* not owned by buffer */
+    Keystroke **yanked;
 };
 
 static void begin_recording_action(Buffer *self) {
@@ -317,8 +318,10 @@ static void buffer_insert_cmd(Buffer *self, key_t cmd) {
 static void execute_keystroke(Buffer *self, Keystroke *keystroke,
                               bool is_simulated) {
     size_t i;
+    key_t key;
     for (i = 0; i < keystroke_len(keystroke); i++) {
-        buffer_cmd(self, keystroke_get_key(keystroke, i), is_simulated);
+        key = keystroke_get_key(keystroke, i);
+        buffer_cmd(self, key, is_simulated);
     }
 }
 
@@ -451,12 +454,12 @@ static selection_t get_selection(Buffer *self) {
             selection.top_left.x = self->cursor_pos.x;
             selection.bottom_right.x = self->selection_start_pos.x;
         }
-        if (self->selection_start_pos.x < self->cursor_pos.x) {
-            selection.top_left.x = self->selection_start_pos.x;
-            selection.bottom_right.x = self->cursor_pos.x;
+        if (self->selection_start_pos.y < self->cursor_pos.y) {
+            selection.top_left.y = self->selection_start_pos.y;
+            selection.bottom_right.y = self->cursor_pos.y;
         } else {
-            selection.top_left.x = self->cursor_pos.x;
-            selection.bottom_right.x = self->selection_start_pos.x;
+            selection.top_left.y = self->cursor_pos.y;
+            selection.bottom_right.y = self->selection_start_pos.y;
         }
     } else {
         selection.top_left = self->cursor_pos;
@@ -469,21 +472,21 @@ static void yank_selection(Buffer *self) {
     selection_t selection = get_selection(self);
     vector_t pos;
 
-    keystroke_destroy(self->yanked);
-    self->yanked = keystroke_create();
-    keystroke_append_key(self->yanked, 'i');
+    keystroke_destroy(*self->yanked);
+    *self->yanked = keystroke_create();
+    keystroke_append_key(*self->yanked, 'i');
 
     for (pos.y = selection.top_left.y; pos.y <= selection.bottom_right.y;
          pos.y++) {
         for (pos.x = selection.top_left.x; pos.x <= selection.bottom_right.x;
              pos.x++) {
-            keystroke_append_key(self->yanked,
+            keystroke_append_key(*self->yanked,
                                  buffer_space_get(self->contents, pos));
         }
-        keystroke_append_key(self->yanked, '\n');
+        keystroke_append_key(*self->yanked, '\n');
     }
 
-    keystroke_append_key(self->yanked, ESC_KEY);
+    keystroke_append_key(*self->yanked, ESC_KEY);
 }
 
 static void cut_selection(Buffer *self, bool is_simulated) {
@@ -493,11 +496,11 @@ static void cut_selection(Buffer *self, bool is_simulated) {
     size_t yanked_len;
     selection_t selection = get_selection(self);
     yank_selection(self);
-    yanked_len = keystroke_len(self->yanked);
+    yanked_len = keystroke_len(*self->yanked);
 
     keystroke_append_key(delete_selection, 'i');
     for (i = 1; i < yanked_len - 1; i++) {
-        key = keystroke_get_key(self->yanked, i);
+        key = keystroke_get_key(*self->yanked, i);
         if (key == '\n' || (!isprint(key) && read_direction(key).is_some)) {
             keystroke_append_key(delete_selection, key);
         } else {
@@ -573,9 +576,8 @@ static void buffer_normal_cmd(Buffer *self, key_t cmd, bool is_simulated) {
             break;
         case 'p':
             self->mode = NORMAL;
-            if (self->yanked) {
-                begin_recording_action(self);
-                execute_keystroke(self, self->yanked, true);
+            if (*self->yanked) {
+                execute_keystroke(self, *self->yanked, false);
             }
             break;
         case 'y': yank_selection(self); break;
@@ -723,7 +725,7 @@ bool buffer_is_modified(Buffer *self) {
 
 #define CHUNK_SIZE 128
 
-Buffer *buffer_create(const char *filename) {
+Buffer *buffer_create(const char *filename, Keystroke **yanked) {
     Buffer *self = calloc(1, sizeof(Buffer));
     if (!self) {
         report_system_error(FILENAME ": memory allocation failure");
@@ -760,7 +762,7 @@ Buffer *buffer_create(const char *filename) {
     if (!self->undo_stack) goto buffer_create_fail;
     self->stack_idx = 0;
 
-    self->yanked = NULL;
+    self->yanked = yanked;
 
     return self;
 buffer_create_fail:
@@ -778,8 +780,6 @@ void buffer_destroy(Buffer *self) {
 
         keystroke_destroy(self->current_redo_keystroke);
         keystroke_destroy(self->current_undo_keystroke);
-
-        keystroke_destroy(self->yanked);
 
         free(self);
     }

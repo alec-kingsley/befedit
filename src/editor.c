@@ -41,6 +41,8 @@ struct Editor {
 
     /* NULL if config couldn't be loaded */
     Interpreter *config;
+
+    Keystroke *yanked;
 };
 
 void editor_registor_macro(Editor *self, vector_t pos, key_t key) {
@@ -273,10 +275,10 @@ static void editor_previous(Editor *self) {
     self->buffer = list_get(self->buffers, self->buffer_idx);
 }
 
-static void editor_open(Editor *self, const char *name) {
-    Buffer *buffer = buffer_create(name);
+void editor_open(Editor *self, const char *name) {
+    Buffer *buffer = buffer_create(name, &self->yanked);
     self->buffer = buffer;
-    editor_add_buffer(self, buffer);
+    list_insert(self->buffers, buffer, list_len(self->buffers));
     self->buffer_idx = list_len(self->buffers) - 1;
 }
 
@@ -352,10 +354,6 @@ static void run_command(Editor *self) {
         }
     }
     command_destroy(command);
-}
-
-void editor_add_buffer(Editor *self, Buffer *buffer) {
-    list_insert(self->buffers, buffer, list_len(self->buffers));
 }
 
 #define CONFIG_PATH_FROM_HOME "/.config/befedit/config.b98"
@@ -597,10 +595,12 @@ static bool editor_execute_key(Editor *self, key_t key) {
 bool editor_execute_keystroke(Editor *self, Keystroke *keystroke) {
     size_t i;
     bool keep_running = true;
+    key_t key;
     for (i = 0; i < keystroke_len(keystroke) && keep_running; i++) {
-        keep_running
-            = editor_execute_key(self, keystroke_get_key(keystroke, i));
+        key = keystroke_get_key(keystroke, i);
+        keep_running = editor_execute_key(self, key);
     }
+
     return keep_running;
 }
 
@@ -608,7 +608,7 @@ void editor_run(Editor *self) {
     key_t key;
     bool keep_running = true;
     if (list_len(self->buffers) == 0) {
-        self->buffer = buffer_create("");
+        self->buffer = buffer_create("", &self->yanked);
         if (!self->buffer) goto editor_run_fail;
         list_insert(self->buffers, self->buffer, 0);
     } else {
@@ -666,6 +666,8 @@ Editor *editor_create(void) {
     reset_status_message(self);
     self->buffer_idx = 0;
 
+    self->yanked = NULL;
+
     return self;
 editor_create_fail:
     editor_destroy(self);
@@ -679,6 +681,7 @@ void editor_destroy(Editor *self) {
         free(self->config_path);
         string_builder_destroy(self->cmd);
         interpreter_destroy(self->config);
+        keystroke_destroy(self->yanked);
         free(self);
     }
 }

@@ -25,9 +25,9 @@ bool editor_execute_keystroke(Editor *self, Keystroke *keystroke);
 void editor_run(Editor *self);
 
 /**
- * Add buffer to `self`.
+ * Open buffer.
  */
-void editor_add_buffer(Editor *self, Buffer *buffer);
+void editor_open(Editor *self, const char *name);
 
 /**
  * Create a new `Editor` object.

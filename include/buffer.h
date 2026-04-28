@@ -1,9 +1,10 @@
 #pragma once
-#include "direction.h"
 #ifndef BUFFER_H
 #define BUFFER_H
 
+#include "direction.h"
 #include "key.h"
+#include "keystroke.h"
 #include "string_builder.h"
 #include <stdbool.h>
 #include <stdint.h>
@@ -73,7 +74,7 @@ bool buffer_is_modified(Buffer *self);
  * The contents of `Buffer` will be initialized to be the contents of
  * `filename` if the file exists, else it will be set to empty.
  */
-Buffer *buffer_create(const char *filename);
+Buffer *buffer_create(const char *filename, Keystroke **yanked);
 
 /**
  * Destroy `self`.
