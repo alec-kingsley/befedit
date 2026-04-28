@@ -33,8 +33,11 @@ void update_window_size(void) {
     struct winsize ws;
 
     if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0) {
-        report_system_error(FILENAME ": failed to get window size");
-        exit(1);
+        /* try again with stdin */
+        if (ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0) {
+            report_system_error(FILENAME ": failed to get window size");
+            exit(1);
+        }
     }
 
     g_term.col_ct = ws.ws_col;
