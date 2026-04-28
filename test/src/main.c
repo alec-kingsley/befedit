@@ -17,7 +17,7 @@
 
 #define BEFEDIT_PATH "/usr/local/bin/befedit"
 
-#define TYPING_SPEED_WPM 100
+#define TYPING_SPEED_WPM 140
 #define TYPING_CHAR_INTERVAL_MS (1000 * 60 / (TYPING_SPEED_WPM * 5))
 
 static void test(const char *keys, const char *filename) {
