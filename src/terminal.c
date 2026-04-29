@@ -135,6 +135,11 @@ key_t get_key(void) {
     }
 }
 
+void flush_stdin(void) {
+    char c;
+    while (read(STDIN_FILENO, &c, 1) == 1);    
+}
+
 void move_cursor(StringBuilder *display, uint16_t row, uint16_t col) {
     char fmt[16];
     sprintf(fmt, "\x1b[%hu;%huH", row, col);

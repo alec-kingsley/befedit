@@ -8,7 +8,9 @@
 #include "stack.h"
 #include "string_builder.h"
 #include "vector.h"
+#include <bits/pthreadtypes.h>
 #include <ctype.h>
+#include <pthread.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -99,8 +101,8 @@ struct Interpreter {
     StringBuilder *output;
 
     /* an error has been reported */
-    /* volatile since calling thread can modify it */
     volatile bool is_poisoned;
+    pthread_mutex_t mutex;
 
     /* not owned by `self`, just a reference */
     Editor *editor;
@@ -113,6 +115,12 @@ static void reflect(Interpreter *self);
 static void interpreter_error(Interpreter *self, const char *error) {
     self->is_poisoned = true;
     string_builder_set(self->output, error);
+}
+
+void interpreter_out_of_time(Interpreter *self) {
+    pthread_mutex_lock(&self->mutex);
+    interpreter_error(self, "timed out");
+    pthread_mutex_unlock(&self->mutex);
 }
 
 /**
@@ -1112,6 +1120,7 @@ static void next_ip(Interpreter *self) {
 int interpreter_run(Interpreter *self) {
     funge_cell_t instr = funge_space_get(self->funge_space, self->ip->pos);
     while (!self->is_poisoned) {
+        pthread_mutex_lock(&self->mutex);
         if (self->ip->string_mode) {
             execute_string_mode_instruction(self, instr);
             next_ip(self);
@@ -1124,6 +1133,7 @@ int interpreter_run(Interpreter *self) {
             }
         }
         instr = next_instruction(self);
+        pthread_mutex_unlock(&self->mutex);
     }
     return self->return_code;
 }
@@ -1133,6 +1143,7 @@ void interpreter_spawn_macro_ip(Interpreter *self, vector_t pos) {
     InstructionPointer *macro_ip = instruction_pointer_create();
     option_fingerprint_t fingerprint = find_fingerprint(FINGERPRINT_ID("BFDT"));
     void *func;
+    pthread_mutex_lock(&self->mutex);
     macro_ip->pos = pos;
     if (fingerprint.is_some) {
         for (i = 0; i < 26; i++) {
@@ -1153,6 +1164,7 @@ void interpreter_spawn_macro_ip(Interpreter *self, vector_t pos) {
     } else {
         queue_enqueue(self->other_ips, macro_ip);
     }
+    pthread_mutex_unlock(&self->mutex);
 }
 
 #define CHUNK_SIZE 128
@@ -1247,8 +1259,8 @@ static void instruction_pointer_destroy(InstructionPointer *self) {
     }
 }
 
-volatile bool *interpreter_is_poisoned_ref(Interpreter *self) {
-    return &self->is_poisoned;
+bool interpreter_is_poisoned(Interpreter *self) {
+    return self->is_poisoned;
 }
 
 char *interpreter_get_output(Interpreter *self) {
@@ -1256,6 +1268,7 @@ char *interpreter_get_output(Interpreter *self) {
 }
 
 Interpreter *interpreter_create(const char *fname, Editor *editor) {
+    pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
     Interpreter *self = calloc(1, sizeof(Interpreter));
     if (!self) {
         report_system_error(FILENAME ": memory allocation failure");
@@ -1263,7 +1276,9 @@ Interpreter *interpreter_create(const char *fname, Editor *editor) {
     }
 
     self->editor = editor;
+
     self->is_poisoned = false;
+    self->mutex = mutex;
 
     self->funge_space = funge_space_create(fname);
     if (!self->funge_space) goto interpreter_create_fail;
@@ -1292,6 +1307,7 @@ void interpreter_destroy(Interpreter *self) {
         queue_destroy(self->other_ips);
         instruction_pointer_destroy(self->ip);
         string_builder_destroy(self->output);
+        pthread_mutex_destroy(&self->mutex);
         free(self);
     }
 }

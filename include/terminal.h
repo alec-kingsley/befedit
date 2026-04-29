@@ -28,6 +28,11 @@ uint16_t get_col_ct(void);
 key_t get_key(void);
 
 /**
+ * Flush stdin.
+ */
+void flush_stdin(void);
+
+/**
  * Append cursor move to `(row, col)` command to `display`
  * Top left is (1, 1)
  */

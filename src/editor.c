@@ -469,9 +469,7 @@ static void run_interpreter_on_timer(Editor *self,
         ret = pthread_cond_timedwait(args.cond, args.mutex, &timeout);
         if (ret != 0) {
             /* stop the interpreter from running */
-            /* TODO - is this guaranteed to stop it in time? */
-            *(interpreter_is_poisoned_ref(self->config)) = true;
-
+            interpreter_out_of_time(self->config);
             if (ret == ETIMEDOUT) {
                 break;
             } else {
@@ -485,7 +483,7 @@ static void run_interpreter_on_timer(Editor *self,
     if (*args.finished) {
         pthread_join(thread, NULL);
         output = interpreter_get_output(self->config);
-        if (*(interpreter_is_poisoned_ref(self->config))) {
+        if (interpreter_is_poisoned(self->config)) {
             self->status_message_is_error = true;
             string_builder_set(self->status_message, "interpreter error: ");
         } else {
@@ -504,6 +502,7 @@ static void run_interpreter_on_timer(Editor *self,
     }
     pthread_mutex_destroy(args.mutex);
     pthread_cond_destroy(args.cond);
+    flush_stdin();
 }
 
 static void editor_load_config(Editor *self) {

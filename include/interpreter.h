@@ -16,7 +16,12 @@ char *interpreter_get_output(Interpreter *self);
 /**
  * True iff `self` is had an error.
  */
-volatile bool *interpreter_is_poisoned_ref(Interpreter *self);
+bool interpreter_is_poisoned(Interpreter *self);
+
+/**
+ * Poison `self` for timing out.
+ */
+void interpreter_out_of_time(Interpreter *self);
 
 /**
  * Run interpreter.
