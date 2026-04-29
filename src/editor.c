@@ -452,6 +452,7 @@ static void run_interpreter_on_timer(Editor *self,
     struct timespec timeout;
     int ret;
     const char *output;
+    bool timed_out = false;
     string_builder_set(self->status_message, "");
 
     if (pthread_create(&thread, NULL, interpreter_run_wrapper, &args)) {
@@ -470,6 +471,7 @@ static void run_interpreter_on_timer(Editor *self,
         if (ret != 0) {
             /* stop the interpreter from running */
             interpreter_out_of_time(self->config);
+            timed_out = true;
             if (ret == ETIMEDOUT) {
                 break;
             } else {
@@ -480,7 +482,7 @@ static void run_interpreter_on_timer(Editor *self,
     }
     pthread_mutex_unlock(args.mutex);
 
-    if (*args.finished) {
+    if (*args.finished && !timed_out) {
         pthread_join(thread, NULL);
         output = interpreter_get_output(self->config);
         if (interpreter_is_poisoned(self->config)) {
