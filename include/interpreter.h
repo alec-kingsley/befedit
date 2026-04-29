@@ -2,8 +2,8 @@
 #ifndef INTERPRETER_H
 #define INTERPRETER_H
 
-#include <stdbool.h>
 #include "editor.h"
+#include <stdbool.h>
 
 typedef struct Interpreter Interpreter;
 
@@ -16,7 +16,7 @@ char *interpreter_get_output(Interpreter *self);
 /**
  * True iff `self` is had an error.
  */
-bool *interpreter_is_poisoned_ref(Interpreter *self);
+volatile bool *interpreter_is_poisoned_ref(Interpreter *self);
 
 /**
  * Run interpreter.

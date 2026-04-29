@@ -99,7 +99,8 @@ struct Interpreter {
     StringBuilder *output;
 
     /* an error has been reported */
-    bool is_poisoned;
+    /* volatile since calling thread can modify it */
+    volatile bool is_poisoned;
 
     /* not owned by `self`, just a reference */
     Editor *editor;
@@ -1246,7 +1247,7 @@ static void instruction_pointer_destroy(InstructionPointer *self) {
     }
 }
 
-bool *interpreter_is_poisoned_ref(Interpreter *self) {
+volatile bool *interpreter_is_poisoned_ref(Interpreter *self) {
     return &self->is_poisoned;
 }
 
