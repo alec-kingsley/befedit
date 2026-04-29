@@ -188,7 +188,7 @@ v                                     <
      |      +--- enter
      +-- esc
  
- >21 'SK ;set to ctrl-s; @
+> 12 'SK ;set to ctrl-s; @
 ```
 
 Or, more consisely:
