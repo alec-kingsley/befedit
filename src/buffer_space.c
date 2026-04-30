@@ -25,14 +25,32 @@ struct BufferSpace {
     bool is_new_file;
 };
 
+static void buffer_space_remove_spaces_from_line_ends(BufferSpace *self) {
+    int32_t i, j;
+    char c;
+    StringBuilder *line;
+    for (i = self->buffer_top_left.y; i <= self->buffer_bottom_right.y; i++) {
+        line = self->lines[i];
+        j = string_builder_len(line) - 1;
+        while (j >= 0) {
+            c = string_builder_get_char(line, j);
+            if (c != ' ' && c != '\t') {
+                string_builder_restrict(line, 0, j + 1);
+                break;
+            }
+            j--;
+        }
+    }
+}
+
 void buffer_space_clean_whitespace(BufferSpace *self) {
-    /* TODO - remove ends of each line and ending lines */
     while (self->buffer_top_left.y > 0) {
         buffer_space_remove_row(self, 0);
     }
     while (self->buffer_top_left.x > 0) {
         buffer_space_remove_col(self, 0);
     }
+    buffer_space_remove_spaces_from_line_ends(self);
 }
 
 vector_t *buffer_space_get_coordinate(BufferSpace *self, vector_t pos) {
@@ -280,7 +298,8 @@ void buffer_space_remove_col(BufferSpace *self, int32_t col) {
  */
 void buffer_space_write(BufferSpace *self, FILE *file) {
     size_t i;
-    /* if you compare i to `self->line_ct` instead, it will print a bunch of extra lines */ 
+    /* if you compare i to `self->line_ct` instead, it will print a bunch of
+     * extra lines */
     for (i = 0; i <= (size_t)self->buffer_bottom_right.y; i++) {
         fwrite(string_builder_to_string(self->lines[i]), sizeof(char),
                string_builder_len(self->lines[i]), file);
