@@ -67,7 +67,7 @@ vector_t *buffer_space_get_coordinate(BufferSpace *self, vector_t pos) {
 /**
  * Double the available size in `lines`.
  */
-static void expand_lines(BufferSpace *self, bool at_end) {
+static void expand_lines(BufferSpace *self) {
     const size_t new_line_ct = self->line_ct * 2;
     void *new;
     size_t i;
@@ -80,28 +80,19 @@ static void expand_lines(BufferSpace *self, bool at_end) {
         exit(1);
     }
     self->lines = new;
-    if (at_end) {
-        for (i = self->line_ct; i < new_line_ct; i++) {
-            self->lines[i] = string_builder_create();
-        }
-    } else {
-        memmove(&self->lines[self->line_ct], self->lines,
-                self->line_ct * sizeof(StringBuilder *));
-        for (i = 0; i < self->line_ct; i++) {
-            self->lines[i] = string_builder_create();
-        }
+    for (i = self->line_ct; i < new_line_ct; i++) {
+        self->lines[i] = string_builder_create();
     }
     self->line_ct = new_line_ct;
 }
 
 static void buffer_space_ensure_y_exists(BufferSpace *self, int32_t y) {
-    bool at_end;
     if (y < 0) {
-        at_end = false;
-        expand_lines(self, at_end);
-    } else if ((size_t)y >= self->line_ct) {
-        at_end = true;
-        expand_lines(self, at_end);
+        report_logic_error(FILENAME ": attempt to create negative y-value");
+    } else {
+        while ((size_t)y >= self->line_ct) {
+            expand_lines(self);
+        }
     }
 }
 
@@ -231,9 +222,6 @@ void buffer_space_insert_row(BufferSpace *self, int32_t row) {
     memmove(&self->lines[row + 1], &self->lines[row],
             (self->line_ct - row - 1) * sizeof(StringBuilder *));
     self->lines[row] = string_builder;
-    if (self->buffer_bottom_right.y >= row) {
-        self->buffer_bottom_right.y++;
-    }
     update_row_coordinates(self, row == 0 ? INT32_MIN : row, 1);
     if (self->buffer_top_left.y >= row) {
         self->buffer_top_left.y++;

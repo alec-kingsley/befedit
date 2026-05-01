@@ -137,7 +137,6 @@ static void follow_momentum(Buffer *self) {
 }
 
 static void add_row_top(Buffer *self) {
-    /* int32_min so it's not between actions */
     buffer_space_insert_row(self->contents, 0);
 }
 
