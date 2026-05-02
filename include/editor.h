@@ -24,6 +24,11 @@ vector_t editor_selection_bottom_right(Editor *self);
 vector_t editor_cursor(Editor *self);
 
 /**
+ * Current momentum.
+ */
+vector_t editor_momentum(Editor *self);
+
+/**
  * Get char at the currently open buffer's position `pos`.
  */
 char editor_get(Editor *self, vector_t pos);

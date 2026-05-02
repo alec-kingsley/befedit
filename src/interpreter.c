@@ -182,6 +182,12 @@ static void bfdt_c(Interpreter *self) {
     funge_stack_push(self->ip->stack, cursor.y);
 }
 
+static void bfdt_m(Interpreter *self) {
+    vector_t momentum = editor_momentum(self->editor);
+    funge_stack_push(self->ip->stack, momentum.x);
+    funge_stack_push(self->ip->stack, momentum.y);
+}
+
 static void bool_a(Interpreter *self) {
     funge_cell_t a = funge_stack_pop(self->ip->stack);
     funge_cell_t b = funge_stack_pop(self->ip->stack);
@@ -295,7 +301,7 @@ static const fingerprint_t FINGERPRINTS[] = {
          NULL,   /* J */
          bfdt_k, /* K */
          NULL,   /* L */
-         NULL,   /* M */
+         bfdt_m, /* M */
          NULL,   /* N */
          NULL,   /* O */
          NULL,   /* P */

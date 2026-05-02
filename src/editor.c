@@ -57,6 +57,10 @@ vector_t editor_cursor(Editor *self) {
     return buffer_cursor(self->buffer);
 }
 
+vector_t editor_momentum(Editor *self) {
+    return buffer_momentum(self->buffer);
+}
+
 char editor_get(Editor *self, vector_t pos) {
     return buffer_get(self->buffer, pos);
 }

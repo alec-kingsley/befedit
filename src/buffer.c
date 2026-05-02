@@ -483,6 +483,19 @@ vector_t buffer_cursor(Buffer *self) {
     return self->cursor_pos;
 }
 
+vector_t buffer_momentum(Buffer *self) {
+    const vector_t right = {1, 0};
+    const vector_t left = {-1, 0};
+    const vector_t up = {0, -1};
+    const vector_t down = {0, 1};
+    switch (self->momentum) {
+    case RIGHT: return right;
+    case LEFT: return left;
+    case UP: return up;
+    case DOWN: return down;
+    }
+}
+
 static void yank_selection(Buffer *self) {
     selection_t selection = get_selection(self);
     vector_t pos;

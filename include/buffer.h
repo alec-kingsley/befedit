@@ -30,6 +30,11 @@ vector_t buffer_selection_bottom_right(Buffer *self);
 vector_t buffer_cursor(Buffer *self);
 
 /**
+ * Current momentum.
+ */
+vector_t buffer_momentum(Buffer *self);
+
+/**
  * Get char at the currently open buffer's position `pos`.
  */
 char buffer_get(Buffer *self, vector_t pos);

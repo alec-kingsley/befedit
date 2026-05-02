@@ -174,6 +174,8 @@ buffer.
 
 `C` - push a vector representing the current cursor position
 
+`M` - push a vector representing the current cursor momentum
+
 `K` - pop a letter `x` followed by a vector `v`. This defines a macro which will execute
 starting at `v` with an empty stack, a momentum heading to the right, and the `BFDT` fingerprint
 pre-loaded (it will NOT come with anything pushed to stack). The macro may load or unload any
