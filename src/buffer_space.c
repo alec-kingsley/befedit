@@ -396,11 +396,6 @@ BufferSpace *buffer_space_create(const char *fname) {
         fclose(file);
     }
 
-    if (self->buffer_top_left.x == max_distance.x
-        && self->buffer_top_left.y == max_distance.y) {
-        self->buffer_top_left = origin;
-    }
-
     self->fname = fname;
 
     self->coordinates = list_create(free);
