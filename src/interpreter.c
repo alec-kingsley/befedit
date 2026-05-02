@@ -1188,7 +1188,7 @@ void interpreter_spawn_macro_ip(Interpreter *self, vector_t pos) {
                  * pointers */
                 /* TODO - is this actually dangerous? */
                 memcpy(&func, &fingerprint.unwrap.funcs[i], sizeof(func));
-                stack_push(self->ip->semantics[i], func);
+                stack_push(macro_ip->semantics[i], func);
             }
         }
     } else {
