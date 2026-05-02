@@ -452,6 +452,10 @@ static void *interpreter_run_wrapper(void *arg) {
  * Spin up interpreter for config file.
  */
 static void editor_init_config(Editor *self) {
+    if (self->config) {
+        interpreter_destroy(self->config);
+        self->config = NULL;
+    }
     if (check_config_exists(self)) {
         self->config = interpreter_create(self->config_path, self);
         if (self->config == NULL) {
