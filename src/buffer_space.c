@@ -23,6 +23,8 @@ struct BufferSpace {
     List *coordinates; /* List<vector_t*> */
 
     bool is_new_file;
+    /* should each line end with \r\n instead of just \n? */
+    bool use_carriage_returns;
 };
 
 static void buffer_space_remove_spaces_from_line_ends(BufferSpace *self) {
@@ -291,8 +293,11 @@ void buffer_space_write(BufferSpace *self, FILE *file) {
     for (i = 0; i <= (size_t)self->buffer_bottom_right.y; i++) {
         fwrite(string_builder_to_string(self->lines[i]), sizeof(char),
                string_builder_len(self->lines[i]), file);
-        /* TODO - add setting for \r\n instead */
-        fwrite("\n", sizeof(char), strlen("\n"), file);
+        if (self->use_carriage_returns) {
+            fwrite("\r\n", sizeof(char), strlen("\r\n"), file);
+        } else {
+            fwrite("\n", sizeof(char), strlen("\n"), file);
+        }
     }
 }
 
@@ -319,20 +324,40 @@ vector_t buffer_space_bottom_right(BufferSpace *self) {
     return self->buffer_bottom_right;
 }
 
+static void remove_ending_carriage_returns(BufferSpace *self) {
+    size_t i = 0;
+    StringBuilder *line;
+    for (i = 0; i < self->line_ct; i++) {
+        line = self->lines[i];
+        if (string_builder_len(line) > 0) {
+            /* remove last char */
+            string_builder_restrict(line, 0, -1);
+        }
+    }
+}
+
 static void read_file_to_buffer_space(BufferSpace *self, FILE *file) {
     size_t n;
     uint8_t c;
     vector_t pos = {0, 0};
+    bool last_was_carriage_return = false;
+    self->use_carriage_returns = true;
 
     while ((n = fread(&c, 1, sizeof(char), file)) == 1) {
-        if (c == '\r') continue;
         if (c == '\n') {
+            if (!last_was_carriage_return) {
+                self->use_carriage_returns = false;
+            }
             pos.y++;
             pos.x = 0;
         } else {
             buffer_space_put_cant_shrink(self, pos, c);
             pos.x++;
         }
+        last_was_carriage_return = c == '\r';
+    }
+    if (self->use_carriage_returns) {
+        remove_ending_carriage_returns(self);
     }
 }
 
