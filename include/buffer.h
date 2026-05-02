@@ -6,12 +6,33 @@
 #include "key.h"
 #include "keystroke.h"
 #include "string_builder.h"
+#include "vector.h"
 #include <stdbool.h>
 #include <stdint.h>
 
 typedef enum { NORMAL, INSERT, SELECT, COMMAND } mode_t;
 
 typedef struct Buffer Buffer;
+
+/**
+ * Top left corner position of current selection.
+ */
+vector_t buffer_selection_top_left(Buffer *self);
+
+/**
+ * Bottom right corner position of current selection.
+ */
+vector_t buffer_selection_bottom_right(Buffer *self);
+
+/**
+ * Current cursor position.
+ */
+vector_t buffer_cursor(Buffer *self);
+
+/**
+ * Get char at the currently open buffer's position `pos`.
+ */
+char buffer_get(Buffer *self, vector_t pos);
 
 /**
  * Send command to buffer.

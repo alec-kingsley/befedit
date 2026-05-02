@@ -79,6 +79,10 @@ struct Buffer {
     Keystroke **yanked;
 };
 
+char buffer_get(Buffer *self, vector_t pos) {
+    return buffer_space_get(self->contents, pos);
+}
+
 static void begin_recording_action(Buffer *self) {
     self->is_recording = true;
     self->current_redo_keystroke = keystroke_create();
@@ -465,6 +469,18 @@ static selection_t get_selection(Buffer *self) {
         selection.bottom_right = self->cursor_pos;
     }
     return selection;
+}
+
+vector_t buffer_selection_top_left(Buffer *self) {
+    return get_selection(self).top_left;
+}
+
+vector_t buffer_selection_bottom_right(Buffer *self) {
+    return get_selection(self).bottom_right;
+}
+
+vector_t buffer_cursor(Buffer *self) {
+    return self->cursor_pos;
 }
 
 static void yank_selection(Buffer *self) {

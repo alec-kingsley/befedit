@@ -45,6 +45,22 @@ struct Editor {
     Keystroke *yanked;
 };
 
+vector_t editor_selection_top_left(Editor *self) {
+    return buffer_selection_top_left(self->buffer);
+}
+
+vector_t editor_selection_bottom_right(Editor *self) {
+    return buffer_selection_bottom_right(self->buffer);
+}
+
+vector_t editor_cursor(Editor *self) {
+    return buffer_cursor(self->buffer);
+}
+
+char editor_get(Editor *self, vector_t pos) {
+    return buffer_get(self->buffer, pos);
+}
+
 void editor_registor_macro(Editor *self, vector_t pos, key_t key) {
     const size_t i = key - 'A';
     if (i >= 26) {

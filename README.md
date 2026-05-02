@@ -165,6 +165,15 @@ In addition to characters, the following values may be used for special keys:
 
 The `BFDT` fingerprint provides the following commands:
 
+`G` - pop a vector and push the character located at that position in the currently open
+buffer.
+
+`T` - push a vector reprenting the top left corner of the current selection in the buffer.
+
+`B` - push a vector reprenting the bottom right corner of the current selection in the buffer.
+
+`C` - push a vector representing the current cursor position
+
 `K` - pop a letter `x` followed by a vector `v`. This defines a macro which will execute
 starting at `v` with an empty stack, a momentum heading to the right, and the `BFDT` fingerprint
 pre-loaded (it will NOT come with anything pushed to stack). The macro may load or unload any

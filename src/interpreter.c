@@ -152,6 +152,36 @@ static void bfdt_k(Interpreter *self) {
     }
 }
 
+static void bfdt_g(Interpreter *self) {
+    funge_cell_t y
+        = funge_stack_pop(self->ip->stack) + self->ip->storage_offset.y;
+    funge_cell_t x
+        = funge_stack_pop(self->ip->stack) + self->ip->storage_offset.x;
+    vector_t pos;
+    pos.x = x;
+    pos.y = y;
+
+    funge_stack_push(self->ip->stack, editor_get(self->editor, pos));
+}
+
+static void bfdt_t(Interpreter *self) {
+    vector_t top_left = editor_selection_top_left(self->editor);
+    funge_stack_push(self->ip->stack, top_left.x);
+    funge_stack_push(self->ip->stack, top_left.y);
+}
+
+static void bfdt_b(Interpreter *self) {
+    vector_t bottom_right = editor_selection_bottom_right(self->editor);
+    funge_stack_push(self->ip->stack, bottom_right.x);
+    funge_stack_push(self->ip->stack, bottom_right.y);
+}
+
+static void bfdt_c(Interpreter *self) {
+    vector_t cursor = editor_cursor(self->editor);
+    funge_stack_push(self->ip->stack, cursor.x);
+    funge_stack_push(self->ip->stack, cursor.y);
+}
+
 static void bool_a(Interpreter *self) {
     funge_cell_t a = funge_stack_pop(self->ip->stack);
     funge_cell_t b = funge_stack_pop(self->ip->stack);
@@ -254,12 +284,12 @@ static const fingerprint_t FINGERPRINTS[] = {
     {FINGERPRINT_ID("BFDT"),
      {
          NULL,   /* A */
-         NULL,   /* B */
-         NULL,   /* C */
+         bfdt_b, /* B */
+         bfdt_c, /* C */
          NULL,   /* D */
          NULL,   /* E */
          NULL,   /* F */
-         NULL,   /* G */
+         bfdt_g, /* G */
          NULL,   /* H */
          NULL,   /* I */
          NULL,   /* J */
@@ -272,7 +302,7 @@ static const fingerprint_t FINGERPRINTS[] = {
          NULL,   /* Q */
          NULL,   /* R */
          NULL,   /* S */
-         NULL,   /* T */
+         bfdt_t, /* T */
          NULL,   /* U */
          NULL,   /* V */
          NULL,   /* W */

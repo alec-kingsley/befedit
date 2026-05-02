@@ -9,6 +9,26 @@
 typedef struct Editor Editor;
 
 /**
+ * Top left corner position of current selection.
+ */
+vector_t editor_selection_top_left(Editor *self);
+
+/**
+ * Bottom right corner position of current selection.
+ */
+vector_t editor_selection_bottom_right(Editor *self);
+
+/**
+ * Current cursor position.
+ */
+vector_t editor_cursor(Editor *self);
+
+/**
+ * Get char at the currently open buffer's position `pos`.
+ */
+char editor_get(Editor *self, vector_t pos);
+
+/**
  * Register a macro to be executed by `ctrl-{key}`
  * Executes at position `pos`.
  */
