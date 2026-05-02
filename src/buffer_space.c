@@ -362,6 +362,7 @@ static void read_file_to_buffer_space(BufferSpace *self, FILE *file) {
 }
 
 BufferSpace *buffer_space_create(const char *fname) {
+    const vector_t max_distance = {INT32_MAX, INT32_MAX};
     const vector_t origin = {0, 0};
     BufferSpace *self = calloc(1, sizeof(BufferSpace));
     FILE *file = NULL;
@@ -384,7 +385,7 @@ BufferSpace *buffer_space_create(const char *fname) {
         if (!self->lines[i]) goto buffer_space_create_fail;
     }
 
-    self->buffer_top_left = origin;
+    self->buffer_top_left = max_distance;
     self->buffer_bottom_right = origin;
 
     file = fopen(fname, "r");
@@ -393,6 +394,11 @@ BufferSpace *buffer_space_create(const char *fname) {
     } else {
         read_file_to_buffer_space(self, file);
         fclose(file);
+    }
+
+    if (self->buffer_top_left.x == max_distance.x
+        && self->buffer_top_left.y == max_distance.y) {
+        self->buffer_top_left = origin;
     }
 
     self->fname = fname;
