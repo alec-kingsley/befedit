@@ -113,6 +113,11 @@ static void execute_instruction(Interpreter *self, funge_cell_t instr);
 static void reflect(Interpreter *self);
 
 static void interpreter_error(Interpreter *self, const char *error) {
+    while (!queue_is_empty(self->other_ips)) {
+        instruction_pointer_destroy(queue_dequeue(self->other_ips));
+    }
+    instruction_pointer_destroy(self->ip);
+    self->ip = NULL;
     self->is_poisoned = true;
     string_builder_set(self->output, error);
 }
@@ -148,7 +153,7 @@ static void bfdt_k(Interpreter *self) {
     if (key < 'A' || key > 'Z') {
         reflect(self);
     } else {
-        editor_registor_macro(self->editor, pos, key);
+        editor_register_macro(self->editor, pos, key);
     }
 }
 
@@ -1164,7 +1169,10 @@ int interpreter_run(Interpreter *self) {
             next_ip(self);
         } else {
             execute_instruction(self, instr);
-            if (!self->ip) break;
+            if (!self->ip) {
+                pthread_mutex_unlock(&self->mutex);
+                break;
+            }
             if (instr != ' ' && instr != ';') {
                 /* spaces and comments are tickless */
                 next_ip(self);

@@ -65,7 +65,7 @@ char editor_get(Editor *self, vector_t pos) {
     return buffer_get(self->buffer, pos);
 }
 
-void editor_registor_macro(Editor *self, vector_t pos, key_t key) {
+void editor_register_macro(Editor *self, vector_t pos, key_t key) {
     const size_t i = key - 'A';
     if (i >= 26) {
         report_logic_error(FILENAME ": invalid macro");
@@ -556,7 +556,6 @@ static void editor_load_config(Editor *self) {
 static bool editor_execute_macro(Editor *self, vector_t pos) {
     interpreter_thread_args_t args;
     bool finished = false;
-    editor_init_config(self);
     if (!self->config) {
         return true;
     } else {

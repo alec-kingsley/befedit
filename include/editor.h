@@ -37,7 +37,7 @@ char editor_get(Editor *self, vector_t pos);
  * Register a macro to be executed by `ctrl-{key}`
  * Executes at position `pos`.
  */
-void editor_registor_macro(Editor *self, vector_t pos, key_t key);
+void editor_register_macro(Editor *self, vector_t pos, key_t key);
 
 /**
  * Execute a keystroke in `self`.

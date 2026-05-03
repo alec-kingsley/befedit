@@ -212,7 +212,7 @@ in the current selection uppercase.
 ```
 "TDFB"4(  ;load befedit fingerprint;  v
 v                                     <                   enter normal mode
- > ;u-macro;                             ;v<;            ;vvvvv;             ' ,v
+ > ;u-macro;                             ;v<;            ;vvvvv;                v
  v  _v#!`g00g02=k'<_v#!`g10g12=h'  <=l'0< <|M    p12p02C  =*930  p11p01Bp10p00T <
      >20g1-20p    ^ >21g1-21p      ^    |-1<     ^^^^^^^         ^^^^^^^^^^^^^^
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^  ^    <        store cursor    store selection
@@ -235,3 +235,17 @@ v                                     <                   enter normal mode
 Demo of above macro being used on the config file itself:
 
 ![macro demo](./assets/uppercasemacro.gif)
+
+The same interpreter space is used for all macros. This can be used to store
+information between macro runs. The below config file uses this to define a
+macro which prints an incrementing counter each time it's called.
+                                       
+```
+"TDFB"4(  ;load befedit fingerprint;  v
+v ;initialize counter; pn             <
+ > ;c-macro; " :retnuoC">:#,_g.g1+00p v
+> 12 'CK ;set to ctrl-c;  @           <
+```
+
+This could allow for things such as implementing another yank/paste buffer, taking user input for
+macros, etc.
