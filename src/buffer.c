@@ -494,6 +494,8 @@ vector_t buffer_momentum(Buffer *self) {
     case UP: return up;
     case DOWN: return down;
     }
+    report_logic_error(FILENAME ": invalid momentum");
+    exit(1);
 }
 
 static void yank_selection(Buffer *self) {

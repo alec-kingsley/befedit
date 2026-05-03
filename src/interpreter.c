@@ -1171,6 +1171,8 @@ int interpreter_run(Interpreter *self) {
         instr = next_instruction(self);
         pthread_mutex_unlock(&self->mutex);
     }
+    /* clear for macros to use freely */
+    string_builder_set(self->output, "");
     return self->return_code;
 }
 
