@@ -1155,6 +1155,8 @@ static void next_ip(Interpreter *self) {
 
 int interpreter_run(Interpreter *self) {
     funge_cell_t instr = funge_space_get(self->funge_space, self->ip->pos);
+    /* clear for macros to use freely */
+    string_builder_set(self->output, "");
     while (!self->is_poisoned) {
         pthread_mutex_lock(&self->mutex);
         if (self->ip->string_mode) {
@@ -1171,8 +1173,6 @@ int interpreter_run(Interpreter *self) {
         instr = next_instruction(self);
         pthread_mutex_unlock(&self->mutex);
     }
-    /* clear for macros to use freely */
-    string_builder_set(self->output, "");
     return self->return_code;
 }
 
