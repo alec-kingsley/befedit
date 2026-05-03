@@ -10,7 +10,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-typedef enum { NORMAL, INSERT, SELECT, COMMAND } mode_t;
+typedef enum { NORMAL, INSERT, REPLACE, SELECT, COMMAND } mode_t;
 
 typedef struct Buffer Buffer;
 

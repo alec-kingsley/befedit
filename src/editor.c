@@ -106,9 +106,10 @@ static void build_footer(StringBuilder *display, mode_t mode,
                          direction_t momentum, size_t cursor_row,
                          size_t cursor_col) {
     uint16_t col;
-    const char *mode_str = mode == NORMAL   ? "NORMAL"
-                           : mode == INSERT ? "INSERT"
-                                            : "SELECT";
+    const char *mode_str = mode == NORMAL    ? "NORMAL"
+                           : mode == INSERT  ? "INSERT"
+                           : mode == REPLACE ? "REPLACE"
+                                             : "SELECT";
     const char *arrow = momentum == LEFT    ? "←"
                         : momentum == UP    ? "↑"
                         : momentum == RIGHT ? "→"
@@ -597,20 +598,23 @@ static bool editor_execute_key(Editor *self, key_t key) {
             break;
         }
         return true;
-    } else if (key == ':' && self->mode != INSERT) {
+    } else if (key == ':' && self->mode != INSERT && self->mode != REPLACE) {
         string_builder_set(self->cmd, "");
         self->saved_mode = self->mode;
         self->mode = COMMAND;
         return !list_is_empty(self->buffers);
     } else {
-
         if ((key == 'i' || key == 'I' || key == 'a' || key == 'A')
-            && self->mode != INSERT) {
+            && self->mode != INSERT && self->mode != REPLACE) {
             self->mode = INSERT;
-        } else if (key == ESC_KEY && self->mode != NORMAL) {
-            self->mode = NORMAL;
         } else if (key == 'v' && self->mode == NORMAL) {
             self->mode = SELECT;
+        } else if (key == 'r' && self->mode == NORMAL) {
+            self->mode = REPLACE;
+        } else if (key == ESC_KEY) {
+            self->mode = NORMAL;
+        } else if (self->mode == REPLACE) {
+            self->mode = NORMAL;
         }
         buffer_cmd(self->buffer, key, false);
         return true;
