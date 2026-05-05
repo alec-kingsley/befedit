@@ -193,7 +193,7 @@ config file:
 "TDFB"4(  ;load befedit fingerprint;  v
 v                                     <
 #>    ;macro;    v
-@= *93 ":w" a 0  <                    <
+@= *93 ":w" a 0  <
    ^^^      ^
      |      |
      |      +--- enter
@@ -229,7 +229,7 @@ v                                     <                   enter normal mode
                           ^               p12+1g12<    g <
                            !     #                |-g11< <
                            ^`g01p02:+1g02p12g10=a0<      <
-> 12 'UK ;set to ctrl-u;  @      <                     < <
+> 12 'UK ;set to ctrl-u;  @      <                       <
 ```
 
 Demo of above macro being used on the config file itself:
