@@ -212,12 +212,12 @@ in the current selection uppercase.
 ```
 "TDFB"4(  ;load befedit fingerprint;  v
 v                                     <                   enter normal mode
- > ;u-macro;                             ;v<;            ;vvvvv;                v
- v  _v#!`g00g02=k'<_v#!`g10g12=h'  <=l'0< <|M    p12p02C  =*930  p11p01Bp10p00T <
-     >20g1-20p    ^ >21g1-21p      ^    |-1<     ^^^^^^^         ^^^^^^^^^^^^^^
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^  ^    <        store cursor    store selection
-    move cursor to selection's     ^^^^^^^^^^    (0,2 & 1,2)     (TL at 0,0 & 1,0)
-    top left                       set momentum                  (BR at 0,1 & 1,1)
+ > ;u-macro;                             ;v<;            ;vvvvvv;                v
+ v  _v#!`g00g02=k'<_v#!`g10g12=h'  <=l'0< <|M    p12p02C  =:*930  p11p01Bp10p00T <
+     >20g1-20p    ^ >21g1-21p      ^    |-1<     ^^^^^^^          ^^^^^^^^^^^^^^
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^  ^    <        store cursor     store selection
+    move cursor to selection's     ^^^^^^^^^^    (0,2 & 1,2)      (TL at 0,0 & 1,0)
+    top left                       set momentum                   (BR at 0,1 & 1,1)
                                    right
                                                                                   
     enter insert mode
