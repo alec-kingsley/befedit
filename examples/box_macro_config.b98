@@ -1,0 +1,20 @@
+"TDFB"4(  ;load befedit fingerprint;  v
+v                                     <                   enter normal mode
+ > ;b-macro;                             ;v<;            ;vvvvvv;                v
+ v  _v#!`g00g02=k'<_v#!`g10g12=h'  <=l'0< <|M    p12p02C  =:*930  p11p01Bp10p00T <
+     >20g1-20p    ^ >21g1-21p      ^    |-1<     ^^^^^^^          ^^^^^^^^^^^^^^
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^  ^    <        store cursor     store selection
+    move cursor to selection's     ^^^^^^^^^^    (0,2 & 1,2)      (TL at 0,0 & 1,0)
+    top left                       set momentum                   (BR at 0,1 & 1,1)
+                                   right                                >0v<
+                                                                   >11g-|  < make
+    enter insert mode                                >0>30p21g:01g-|       < box
+    vvvvvv                                      >10g-|    v<v<  v< >$   >2v< to
+ >  0'i'l=           >                  20g:00g-|  v<   +'<|<|-2<|-1::+g03<< surround
+                                                >$#= >1^   a $   $         < region
+                                                   2       5     $         <
+                     ^_039*=v                      1       5 '   '         <
+                     ^               p12+1g12<     g         |   -         <
+                      !     #                | -g11<^        <   <         <
+                      ^`g01p02:+1g02p12g10=a0<      ^  +7**<               <
+> 12 'BK ;set to ctrl-b;  @ <                                              <

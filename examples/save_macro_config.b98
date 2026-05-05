@@ -1,0 +1,10 @@
+"TDFB"4(  ;load befedit fingerprint;  v
+v                                     <
+#>    ;macro;    v
+@= *93 ":w" a 0  <
+   ^^^      ^
+     |      |
+     |      +--- enter
+     +-- esc
+ 
+> 12 'SK ;set to ctrl-s; @

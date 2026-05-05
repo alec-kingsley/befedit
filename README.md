@@ -16,7 +16,7 @@ out in binary followed by a new line. (Assumes BASE fingerprint support)
 ![befunge demo](./assets/binarydemo.gif)
 
 Befunge-98 config
-![config demo](./assets/configdemo.gif)
+![config demo](./assets/config.gif)
 
 ## Installation
 
